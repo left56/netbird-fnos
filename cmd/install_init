@@ -1,3 +1,3 @@
-#!/usr/bin/env bash
-set -euo pipefail
-install -d -m 0755 "$TRIM_PKGETC" "$TRIM_PKGVAR"
+#!/bin/sh
+# P0 does not require pre-install files, directories, or privileged setup.
+exit 0
