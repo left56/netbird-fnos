@@ -8,4 +8,6 @@ The project exposes official NetBird client capabilities through an fnOS-native 
 
 ## Status
 
-Initial development scaffold.
+P0 development scaffold only. It is not production-ready and is not a completed fnOS package.
+
+See [development documentation](docs/development.md), [API contract](docs/api.md), and the [provisional package layout](docs/package-layout.md). The backend deliberately wraps the official NetBird CLI only; it does not implement NetBird networking behavior.

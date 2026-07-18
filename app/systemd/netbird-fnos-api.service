@@ -1,0 +1,13 @@
+[Unit]
+Description=NetBird fnOS local management API
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/netbird-fnos/netbird-fnos.env
+ExecStart=/opt/netbird-fnos/bin/netbird-fnos-api
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
