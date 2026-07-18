@@ -48,14 +48,14 @@ func NewLifecycle(manager *BinaryManager, pkgvar string) *Lifecycle {
 	return &Lifecycle{manager: manager, root: filepath.Join(pkgvar, "netbird"), client: &http.Client{Timeout: 60 * time.Second}}
 }
 func (l *Lifecycle) Check(ctx context.Context, version, arch string) (Release, error) {
-	if version == "" {
-		return Release{}, errors.New("a pinned version is required")
-	}
 	return l.release(ctx, version, arch)
 }
 func (l *Lifecycle) Download(ctx context.Context, version, arch, sourceID string) (Binary, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if version == "" {
+		return Binary{}, errors.New("a specific version is required for installation")
+	}
 	r, err := l.release(ctx, version, arch)
 	if err != nil {
 		return Binary{}, err
@@ -184,8 +184,11 @@ func (l *Lifecycle) release(ctx context.Context, version, arch string) (Release,
 	if relArch == "" {
 		return Release{}, errors.New("unsupported architecture")
 	}
-	tag := "v" + strings.TrimPrefix(version, "v")
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/netbirdio/netbird/releases/tags/"+tag, nil)
+	endpoint := "https://api.github.com/repos/netbirdio/netbird/releases/latest"
+	if version != "" {
+		endpoint = "https://api.github.com/repos/netbirdio/netbird/releases/tags/v" + strings.TrimPrefix(version, "v")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return Release{}, err
 	}
@@ -198,6 +201,7 @@ func (l *Lifecycle) release(ctx context.Context, version, arch string) (Release,
 		return Release{}, fmt.Errorf("official release lookup returned %d", resp.StatusCode)
 	}
 	var payload struct {
+		Tag    string `json:"tag_name"`
 		Assets []struct {
 			Name string `json:"name"`
 			URL  string `json:"browser_download_url"`
@@ -207,6 +211,12 @@ func (l *Lifecycle) release(ctx context.Context, version, arch string) (Release,
 		return Release{}, err
 	}
 	v := strings.TrimPrefix(version, "v")
+	if v == "" {
+		v = strings.TrimPrefix(payload.Tag, "v")
+	}
+	if v == "" {
+		return Release{}, errors.New("official release has no version")
+	}
 	asset := "netbird_" + v + "_linux_" + relArch + ".tar.gz"
 	checksums := "netbird_" + v + "_checksums.txt"
 	var au, cu string
