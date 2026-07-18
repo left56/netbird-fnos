@@ -35,7 +35,7 @@ jobs:
             manifest_platform: x86
             goarch: amd64
           - target_arch: arm64
-            manifest_platform: arm64
+            manifest_platform: arm
             goarch: arm64
     runs-on: ubuntu-24.04
     steps:
