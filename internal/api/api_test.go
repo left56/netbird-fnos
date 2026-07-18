@@ -75,6 +75,9 @@ func TestStaticFilesThroughGateway(t *testing.T) {
 }
 
 func TestStaticFilesWithBuiltFrontend(t *testing.T) {
+	if os.Getenv("NETBIRD_FNOS_VERIFY_BUILT_FRONTEND") != "1" {
+		t.Skip("built frontend verification runs through make verify-static-files")
+	}
 	root := filepath.Join("..", "..", "app", "www")
 	for _, pattern := range []string{"*.js", "*.css"} {
 		assets, err := filepath.Glob(filepath.Join(root, "assets", pattern))

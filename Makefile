@@ -5,7 +5,7 @@ BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 BIN := app/bin/netbird-fnos-api
 FPK ?= fnpack
 
-.PHONY: test build frontend verify-frontend check-lifecycle fpk verify-fpk package install-local uninstall-local clean
+.PHONY: test build frontend verify-frontend verify-static-files check-lifecycle fpk verify-fpk package install-local uninstall-local clean
 
 test:
 	go test ./...
@@ -25,6 +25,9 @@ frontend:
 verify-frontend:
 	npm --prefix frontend run verify-gateway-build
 
+verify-static-files:
+	NETBIRD_FNOS_VERIFY_BUILT_FRONTEND=1 go test ./internal/api -run '^TestStaticFilesWithBuiltFrontend$$'
+
 check-lifecycle:
 	@test -z "$$(find cmd -maxdepth 1 -type f ! -perm -u=x -print)"
 	@test -z "$$(grep -rIl "$$(printf '\r')" cmd || true)"
@@ -32,7 +35,7 @@ check-lifecycle:
 	@env -i PATH=/usr/bin:/bin ./cmd/install_init
 	@env -i PATH=/usr/bin:/bin ./cmd/install_callback
 
-fpk: build frontend check-lifecycle
+fpk: build frontend verify-static-files check-lifecycle
 	$(FPK) build
 	$(MAKE) verify-fpk
 
