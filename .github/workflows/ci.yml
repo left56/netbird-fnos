@@ -40,8 +40,15 @@ jobs:
       - name: Validate fnOS metadata and lifecycle scripts
         run: |
           jq empty config/privilege config/resource app/ui/config
+          test -z "$(find cmd -maxdepth 1 -type f ! -perm -u=x -print)"
+          test -z "$(grep -rIl $'\r' cmd || true)"
+          for script in cmd/main cmd/*_init cmd/*_callback; do
+            test "$(head -n 1 "$script")" = '#!/bin/sh'
+            sh -n "$script"
+          done
+          env -i PATH=/usr/bin:/bin ./cmd/install_init
+          env -i PATH=/usr/bin:/bin ./cmd/install_callback
           shellcheck cmd/main cmd/*_init cmd/*_callback
-          bash -n cmd/main cmd/*_init cmd/*_callback
       - name: Install official fnpack 1.2.3
         run: |
           curl --fail --location --silent --show-error https://static2.fnnas.com/fnpack/fnpack-1.2.3-linux-amd64 --output /usr/local/bin/fnpack

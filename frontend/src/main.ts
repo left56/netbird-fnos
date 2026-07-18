@@ -5,7 +5,7 @@ import DashboardView from './views/DashboardView.vue'
 import PlaceholderView from './views/PlaceholderView.vue'
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', component: DashboardView },
     { path: '/settings', component: PlaceholderView, props: { title: 'Settings' } },

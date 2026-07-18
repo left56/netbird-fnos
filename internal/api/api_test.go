@@ -6,6 +6,9 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/left56/netbird-fnos/internal/netbird"
@@ -27,6 +30,83 @@ func TestStatusHasStableUnavailableResponse(t *testing.T) {
 	want := `{"status":"ok","data":{"state":"unavailable","connected":false,"detail":"official NetBird CLI is not installed"}}` + "\n"
 	if r.Body.String() != want {
 		t.Fatalf("got %s", r.Body.String())
+	}
+}
+
+func TestStaticFilesThroughGateway(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "index.html"), "<!doctype html><div id=app></div>")
+	mustWrite(t, filepath.Join(root, "assets", "test.js"), "console.log('netbird')")
+	mustWrite(t, filepath.Join(root, "assets", "test.css"), "body { color: black; }")
+	h := WithStaticFiles(NewHandler(testLogger(), fakeStatus{}, BuildInfo{Version: "test"}), "/app/netbird-fnos", root)
+
+	tests := []struct {
+		name        string
+		path        string
+		wantStatus  int
+		contentType string
+		body        string
+	}{
+		{"gateway entry", "/app/netbird-fnos", http.StatusOK, "text/html", "<!doctype html>"},
+		{"gateway entry slash", "/app/netbird-fnos/", http.StatusOK, "text/html", "<!doctype html>"},
+		{"javascript asset", "/app/netbird-fnos/assets/test.js", http.StatusOK, "javascript", "console.log"},
+		{"stylesheet asset", "/app/netbird-fnos/assets/test.css", http.StatusOK, "text/css", "color: black"},
+		{"missing asset is not SPA fallback", "/app/netbird-fnos/assets/missing.js", http.StatusNotFound, "", "404 page not found"},
+		{"SPA route fallback", "/app/netbird-fnos/settings", http.StatusOK, "text/html", "<!doctype html>"},
+		{"gateway API", "/app/netbird-fnos/api/health", http.StatusOK, "application/json", "netbird-fnos-api"},
+		{"direct API remains API", "/api/health", http.StatusOK, "application/json", "netbird-fnos-api"},
+		{"outside gateway is not static", "/app/assets/test.js", http.StatusNotFound, "", "404 page not found"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r := httptest.NewRecorder()
+			h.ServeHTTP(r, httptest.NewRequest(http.MethodGet, test.path, nil))
+			if r.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d", r.Code, test.wantStatus)
+			}
+			if test.contentType != "" && !strings.Contains(r.Header().Get("Content-Type"), test.contentType) {
+				t.Fatalf("Content-Type = %q, want it to contain %q", r.Header().Get("Content-Type"), test.contentType)
+			}
+			if !strings.Contains(r.Body.String(), test.body) {
+				t.Fatalf("body = %q, want it to contain %q", r.Body.String(), test.body)
+			}
+		})
+	}
+}
+
+func TestStaticFilesWithBuiltFrontend(t *testing.T) {
+	if os.Getenv("NETBIRD_FNOS_VERIFY_BUILT_FRONTEND") != "1" {
+		t.Skip("built frontend verification runs through make verify-static-files")
+	}
+	root := filepath.Join("..", "..", "app", "www")
+	for _, pattern := range []string{"*.js", "*.css"} {
+		assets, err := filepath.Glob(filepath.Join(root, "assets", pattern))
+		if err != nil || len(assets) == 0 {
+			t.Fatalf("built frontend has no %s asset: %v", pattern, err)
+		}
+		asset := filepath.Base(assets[0])
+		h := WithStaticFiles(NewHandler(testLogger(), fakeStatus{}, BuildInfo{Version: "test"}), "/app/netbird-fnos", root)
+		r := httptest.NewRecorder()
+		h.ServeHTTP(r, httptest.NewRequest(http.MethodGet, "/app/netbird-fnos/assets/"+asset, nil))
+		if r.Code != http.StatusOK {
+			t.Fatalf("built asset %q returned %d", asset, r.Code)
+		}
+		if pattern == "*.js" && !strings.Contains(r.Header().Get("Content-Type"), "javascript") {
+			t.Fatalf("JavaScript Content-Type = %q", r.Header().Get("Content-Type"))
+		}
+		if pattern == "*.css" && !strings.Contains(r.Header().Get("Content-Type"), "text/css") {
+			t.Fatalf("CSS Content-Type = %q", r.Header().Get("Content-Type"))
+		}
+	}
+}
+
+func mustWrite(t *testing.T, filename, contents string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(filename), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filename, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
 # fnOS owns package data removal. This app never deletes official NetBird identity data.
 exit 0
