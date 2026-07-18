@@ -28,6 +28,15 @@ jobs:
       - run: npm --prefix frontend ci
       - run: npm --prefix frontend run build
   fnos-package:
+    strategy:
+      matrix:
+        include:
+          - target_arch: x86_64
+            manifest_platform: x86
+            goarch: amd64
+          - target_arch: arm64
+            manifest_platform: arm64
+            goarch: arm64
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +64,13 @@ jobs:
           chmod +x /usr/local/bin/fnpack
           fnpack --help
       - name: Build FPK
-        run: make fpk
+        env:
+          NETBIRD_VERSION: 0.71.4
+          TARGET_ARCH: ${{ matrix.target_arch }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          sed -i "s/^platform=.*/platform=${{ matrix.manifest_platform }}/" manifest
+          make VERSION=0.2.0 fpk
+          mv netbird-fnos.fpk netbird-fnos-0.2.0-${{ matrix.target_arch }}.fpk
       - uses: actions/upload-artifact@v4
-        with: { name: netbird-fnos-fpk, path: netbird-fnos.fpk }
+        with: { name: netbird-fnos-fpk-${{ matrix.target_arch }}, path: netbird-fnos-0.2.0-${{ matrix.target_arch }}.fpk }

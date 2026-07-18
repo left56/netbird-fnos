@@ -21,7 +21,7 @@ func (ExecRunner) Run(ctx context.Context, binary string, args ...string) ([]byt
 
 type Client struct {
 	runner  Runner
-	binary  string
+	binary  func(context.Context) string
 	timeout time.Duration
 }
 type Status struct {
@@ -31,13 +31,21 @@ type Status struct {
 }
 
 func NewClient(runner Runner, binary string, timeout time.Duration) Client {
-	return Client{runner: runner, binary: binary, timeout: timeout}
+	return Client{runner: runner, binary: func(context.Context) string { return binary }, timeout: timeout}
+}
+
+func NewManagedClient(runner Runner, manager *BinaryManager, timeout time.Duration) Client {
+	return Client{runner: runner, binary: manager.Path, timeout: timeout}
 }
 
 func (c Client) Status(ctx context.Context) Status {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
-	output, err := c.runner.Run(ctx, c.binary, "status", "--json")
+	binary := c.binary(ctx)
+	if binary == "" {
+		return Status{State: "unavailable", Detail: "official NetBird CLI is not installed"}
+	}
+	output, err := c.runner.Run(ctx, binary, "status", "--json")
 	if err != nil {
 		return unavailable(err)
 	}
@@ -64,4 +72,6 @@ func unavailable(err error) Status {
 	return Status{State: "unavailable", Detail: "official NetBird CLI is unavailable"}
 }
 
-func (c Client) String() string { return fmt.Sprintf("netbird client (%s)", c.binary) }
+func (c Client) String() string {
+	return fmt.Sprintf("netbird client (%s)", c.binary(context.Background()))
+}

@@ -31,8 +31,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	client := netbird.NewClient(netbird.ExecRunner{}, cfg.NetBirdBinary, cfg.CommandTimeout)
-	handler := api.NewHandler(logger, client, api.BuildInfo{Version: version, Commit: commit, BuildTime: buildTime})
+	manager := netbird.NewBinaryManager(cfg.PackageVar, cfg.AppDest, netbird.ExecRunner{}, cfg.CommandTimeout)
+	client := netbird.NewManagedClient(netbird.ExecRunner{}, manager, cfg.CommandTimeout)
+	handler := api.NewHandler(logger, client, manager, api.BuildInfo{Version: version, Commit: commit, BuildTime: buildTime})
 	if cfg.WebRoot != "" {
 		handler = api.WithStaticFiles(handler, cfg.GatewayPrefix, cfg.WebRoot)
 	}
