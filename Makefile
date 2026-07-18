@@ -43,7 +43,7 @@ verify-fpk:
 	@test -f netbird-fnos.fpk
 	@file netbird-fnos.fpk
 	@for path in manifest config/privilege config/resource cmd/main cmd/install_init cmd/install_callback app.tgz; do tar -tzf netbird-fnos.fpk | grep -qx "$$path"; done
-	@tar -xOzf netbird-fnos.fpk manifest | grep -Eq '^version[[:space:]]*=[[:space:]]*0.1.1$$'
+	@tar -xOzf netbird-fnos.fpk manifest | grep -Eq '^version[[:space:]]*=[[:space:]]*0.1.2$$'
 	@for script in cmd/main cmd/install_init cmd/install_callback cmd/upgrade_init cmd/upgrade_callback cmd/uninstall_init cmd/uninstall_callback; do tar -tzvf netbird-fnos.fpk "$$script" | grep -Eq '^-rwx'; ! tar -xOzf netbird-fnos.fpk "$$script" | grep -q "$$(printf '\r')"; done
 	@tar -xOzf netbird-fnos.fpk app.tgz | tar -xzO www/index.html | grep -Eq '/app/netbird-fnos/assets/'
 	@! tar -xOzf netbird-fnos.fpk app.tgz | tar -xzO www/index.html | grep -Eq '(src|href)="(\./assets/|/assets/)'

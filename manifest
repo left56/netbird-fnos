@@ -1,5 +1,5 @@
 appname=netbird-fnos
-version=0.1.1
+version=0.1.2
 display_name=NetBird
 desc=fnOS 的本地 NetBird 状态查看器。
 source=thirdparty
@@ -13,4 +13,4 @@ desktop_uidir=ui
 desktop_applaunchname=netbird-fnos.main
 disable_authorization_path=true
 checkport=false
-changelog=修复 fnOS 安装初始化脚本异常、统一网关路径下前端静态资源加载白屏，并使用 NetBird 官方图标资产。
+changelog=0.1.2：修复 fnOS 安装初始化脚本异常、统一网关路径下前端静态资源加载白屏，并使用 NetBird 官方图标资产。
