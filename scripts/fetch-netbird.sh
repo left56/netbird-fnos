@@ -17,10 +17,10 @@ checksum_url="$(jq -r --arg name "$checksums" '.assets[] | select(.name == $name
 test "$asset_url" != null && test "$checksum_url" != null
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 curl --fail --location --silent --show-error "$checksum_url" -o "$tmp/checksums.txt"
-curl --fail --location --silent --show-error "$asset_url" -o "$tmp/archive.tar.gz"
+curl --fail --location --silent --show-error "$asset_url" -o "$tmp/$asset"
 grep -E "[[:space:]]${asset}$" "$tmp/checksums.txt" > "$tmp/expected.txt"
 (cd "$tmp" && sha256sum -c expected.txt)
-tar -xzf "$tmp/archive.tar.gz" -C "$tmp"
+tar -xzf "$tmp/$asset" -C "$tmp"
 binary="$(find "$tmp" -type f -name netbird -perm -u+x -print -quit)"
 test -n "$binary"
 file "$binary" | grep -Eq "(x86-64|aarch64|ARM aarch64)"
