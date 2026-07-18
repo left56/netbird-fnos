@@ -49,7 +49,7 @@ verify-fpk:
 	@test -f netbird-fnos.fpk
 	@file netbird-fnos.fpk
 	@for path in manifest config/privilege config/resource cmd/main cmd/install_init cmd/install_callback app.tgz; do tar -tzf netbird-fnos.fpk | grep -qx "$$path"; done
-	@tar -xOzf netbird-fnos.fpk manifest | grep -Eq '^version[[:space:]]*=[[:space:]]*0.1.2$$'
+	@tar -xOzf netbird-fnos.fpk manifest | grep -E '^version[[:space:]]*=[[:space:]]*0.2.0$$' >/dev/null
 	@for script in cmd/main cmd/install_init cmd/install_callback cmd/upgrade_init cmd/upgrade_callback cmd/uninstall_init cmd/uninstall_callback; do tar -tzvf netbird-fnos.fpk "$$script" | grep -Eq '^-rwx'; ! tar -xOzf netbird-fnos.fpk "$$script" | grep -q "$$(printf '\r')"; done
 	@tar -xOzf netbird-fnos.fpk app.tgz | tar -tz | grep -qx bin/netbird
 	@tar -xOzf netbird-fnos.fpk app.tgz | tar -tvf - bin/netbird | grep -Eq '^-rwx'
