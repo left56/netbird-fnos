@@ -13,4 +13,4 @@ desktop_uidir=ui
 desktop_applaunchname=netbird-fnos.main
 disable_authorization_path=true
 checkport=false
-changelog=修复 fnOS 安装初始化脚本异常。
+changelog=修复 fnOS 安装初始化脚本异常、统一网关路径下前端静态资源加载白屏，并使用 NetBird 官方图标资产。

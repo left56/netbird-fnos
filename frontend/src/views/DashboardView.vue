@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { apiURL } from '../gateway'
 
 type ApiResponse = { status: string; data: unknown }
 const results = ref<Record<string, ApiResponse | { error: string }>>({})
 
 async function load(name: string, path: string) {
-  try { results.value[name] = await (await fetch(`${window.location.pathname.replace(/\/$/, '')}${path}`)).json() as ApiResponse }
+  try { results.value[name] = await (await fetch(apiURL(path))).json() as ApiResponse }
   catch { results.value[name] = { error: 'Local API is unavailable.' } }
 }
 onMounted(() => { void load('health', '/api/health'); void load('version', '/api/version'); void load('status', '/api/status') })

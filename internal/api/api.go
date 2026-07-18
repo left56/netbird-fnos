@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/left56/netbird-fnos/internal/netbird"
@@ -50,16 +52,50 @@ func logging(logger *slog.Logger, next http.Handler) http.Handler {
 func WithStaticFiles(api http.Handler, prefix, root string) http.Handler {
 	files := http.FileServer(http.Dir(root))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, prefix)
-		if path == "" {
-			path = "/"
-		}
-		if strings.HasPrefix(path, "/api/") {
-			http.StripPrefix(prefix, api).ServeHTTP(w, r)
+		requestPath := r.URL.Path
+		if requestPath == "/api" || strings.HasPrefix(requestPath, "/api/") {
+			api.ServeHTTP(w, r)
 			return
 		}
-		request := r.Clone(r.Context())
-		request.URL.Path = path
-		files.ServeHTTP(w, request)
+		if requestPath == prefix || strings.HasPrefix(requestPath, prefix+"/") {
+			relativePath := strings.TrimPrefix(requestPath, prefix)
+			if relativePath == "" {
+				relativePath = "/"
+			}
+			if hasParentPathSegment(relativePath) {
+				http.NotFound(w, r)
+				return
+			}
+			if relativePath == "/api" || strings.HasPrefix(relativePath, "/api/") {
+				http.StripPrefix(prefix, api).ServeHTTP(w, r)
+				return
+			}
+			if strings.HasPrefix(relativePath, "/assets/") {
+				request := r.Clone(r.Context())
+				request.URL.Path = relativePath
+				files.ServeHTTP(w, request)
+				return
+			}
+			if r.Method != http.MethodGet && r.Method != http.MethodHead {
+				http.NotFound(w, r)
+				return
+			}
+			if path.Ext(relativePath) != "" {
+				http.NotFound(w, r)
+				return
+			}
+			http.ServeFile(w, r, filepath.Join(root, "index.html"))
+			return
+		}
+		http.NotFound(w, r)
 	})
+}
+
+func hasParentPathSegment(requestPath string) bool {
+	for _, segment := range strings.Split(requestPath, "/") {
+		if segment == ".." {
+			return true
+		}
+	}
+	return false
 }
