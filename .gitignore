@@ -1,0 +1,9 @@
+dist/
+frontend/node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+*.fpk
+.tools/
+app/bin/netbird-fnos-api
+app/www/*
+!app/www/.gitkeep

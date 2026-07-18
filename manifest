@@ -1,0 +1,16 @@
+appname=netbird-fnos
+version=0.1.0
+display_name=NetBird
+desc=fnOS 的本地 NetBird 状态查看器。
+source=thirdparty
+platform=x86
+maintainer=left56
+maintainer_url=https://github.com/left56/netbird-fnos
+distributor=left56
+distributor_url=https://github.com/left56/netbird-fnos
+ctl_stop=true
+desktop_uidir=ui
+desktop_applaunchname=netbird-fnos.main
+disable_authorization_path=true
+checkport=false
+changelog=初始 fnOS 原生应用包。

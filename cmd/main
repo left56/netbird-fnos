@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+pid_file="${TRIM_PKGVAR}/netbird-fnos-api.pid"; socket_path="${TRIM_APPDEST}/app.sock"; log_file="${TRIM_PKGVAR}/netbird-fnos-api.log"
+write_error() { printf '%s\n' "$1" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"; }
+is_running() { [[ -f "$pid_file" ]] || return 1; local pid; pid="$(cat "$pid_file")"; kill -0 "$pid" 2>/dev/null; }
+case "${1:-}" in
+  start) if is_running; then exit 0; fi; rm -f -- "$pid_file" "$socket_path"; export NB_FNOS_SOCKET="$socket_path" NB_FNOS_GATEWAY_PREFIX="/app/netbird-fnos" NB_FNOS_WEB_ROOT="${TRIM_APPDEST}/www"; nohup "${TRIM_APPDEST}/bin/netbird-fnos-api" >>"$log_file" 2>&1 & echo "$!" > "$pid_file"; sleep 1; if ! is_running; then write_error "NetBird service failed to start; inspect $log_file."; exit 1; fi ;;
+  stop) if ! is_running; then rm -f -- "$pid_file" "$socket_path"; exit 0; fi; pid="$(cat "$pid_file")"; kill "$pid"; for _ in {1..10}; do is_running || break; sleep 1; done; if is_running; then write_error "NetBird service did not stop."; exit 1; fi; rm -f -- "$pid_file" "$socket_path" ;;
+  status) is_running && exit 0; exit 3 ;;
+  *) write_error "Unsupported lifecycle action: ${1:-empty}"; exit 1 ;;
+esac
