@@ -12,7 +12,7 @@ jobs:
   backend:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with: { go-version: '1.26.x' }
       - run: test -z "$(gofmt -l cmd internal)"
@@ -22,8 +22,8 @@ jobs:
   frontend:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: '22.x', cache: npm, cache-dependency-path: frontend/package-lock.json }
       - run: npm --prefix frontend ci
       - run: npm --prefix frontend run build
@@ -39,10 +39,10 @@ jobs:
             goarch: arm64
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with: { go-version: '1.26.x' }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with: { node-version: '22.x', cache: npm, cache-dependency-path: frontend/package-lock.json }
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install --yes shellcheck
@@ -72,5 +72,7 @@ jobs:
           sed -i "s/^platform=.*/platform=${{ matrix.manifest_platform }}/" manifest
           make VERSION=0.2.0 fpk
           mv netbird-fnos.fpk netbird-fnos-0.2.0-${{ matrix.target_arch }}.fpk
-      - uses: actions/upload-artifact@v4
-        with: { name: netbird-fnos-fpk-${{ matrix.target_arch }}, path: netbird-fnos-0.2.0-${{ matrix.target_arch }}.fpk }
+      - uses: actions/upload-artifact@v5
+        with:
+          name: netbird-fnos-fpk-${{ matrix.target_arch }}
+          path: netbird-fnos-0.2.0-${{ matrix.target_arch }}.fpk
