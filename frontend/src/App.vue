@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const links = [['/', 'Dashboard'], ['/client', '客户端管理'], ['/settings', 'Settings'], ['/logs', 'Logs'], ['/about', 'About']]
+const links = [['/', '概览'], ['/peers', 'Peers'], ['/networks', 'Networks'], ['/profiles', 'Profiles'], ['/settings', '设置'], ['/diagnostics', '日志与诊断'], ['/client', '客户端管理']]
 </script>
 
 <template>

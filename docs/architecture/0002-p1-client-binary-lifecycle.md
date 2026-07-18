@@ -43,14 +43,13 @@ sets `allowUnverified` for that request.
 
 A single process-wide mutex serializes installation, selection, rollback and
 deletion. Selection validates the target, probes `version`, saves the former
-target as `previous`, atomically swaps `current`, and health-checks it. Failed
-health checks restore `previous`; if no prior version exists, `current` is
-removed and resolution falls back to the bundled CLI. Current versions cannot
-be deleted.
+target as `previous`, atomically swaps `current`, and health-checks it with
+bounded `netbird version` and `netbird status --check startup` probes. Failed
+checks restore `previous`; if that version also fails, `current` is removed and
+resolution falls back to the bundled CLI. Current versions cannot be deleted.
 
-Restarting the daemon is deliberately outside this wrapper's P1 authority: the
-health check is a bounded `netbird version`, not a request to implement
-networking or daemon control.
+The wrapper does not install, elevate, or restart the daemon: fnOS lifecycle
+and the official daemon own that privilege boundary.
 
 ## Delivery plan
 

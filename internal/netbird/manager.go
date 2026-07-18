@@ -98,6 +98,9 @@ func (m *BinaryManager) Install(ctx context.Context, staged, source, originalURL
 	if err != nil {
 		return Binary{}, err
 	}
+	if expected := hostArch(); expected != "" && b.Arch != expected {
+		return Binary{}, fmt.Errorf("binary architecture %s does not match host %s", b.Arch, expected)
+	}
 	if source == "upload-unverified" && !allowUnverified {
 		return Binary{}, errors.New("unverified upload requires explicit administrator confirmation")
 	}
@@ -155,11 +158,27 @@ func (m *BinaryManager) switchLocked(ctx context.Context, version string) (Binar
 	if err := m.atomicLink("current", target); err != nil {
 		return Binary{}, err
 	}
-	if _, err := m.inspect(ctx, target, Managed); err != nil {
+	if err := m.health(ctx, target); err != nil {
 		_ = m.restorePrevious()
+		// A rollback target must also pass the bounded CLI health probe before it
+		// can be used again; otherwise resolution falls back to bundled.
+		if previous := m.linkTarget("current"); previous != "" {
+			if m.health(ctx, previous) != nil {
+				_ = os.Remove(filepath.Join(m.root, "current"))
+			}
+		}
 		return Binary{}, err
 	}
 	return b, nil
+}
+func (m *BinaryManager) health(ctx context.Context, binary string) error {
+	if _, err := m.inspect(ctx, binary, Managed); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, m.timeout)
+	defer cancel()
+	_, err := m.runner.Run(ctx, binary, "status", "--check", "startup")
+	return err
 }
 func (m *BinaryManager) Rollback(ctx context.Context) (Binary, error) {
 	m.mu.Lock()
