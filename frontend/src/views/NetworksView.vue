@@ -24,7 +24,8 @@ const shown = computed(() =>
 );
 async function load() {
   try {
-    all.value = await api<any[]>("/api/networks");
+    const result = await api<any>("/api/networks");
+    all.value = result.all || [];
     selected.value = new Set(
       all.value.filter((n) => n.selected).map((n) => n.id),
     );
@@ -32,6 +33,7 @@ async function load() {
     error.value = "Networks 不可用。";
   }
 }
+function selectShown(on: boolean) { const next = new Set(selected.value); shown.value.forEach((network) => on ? next.add(network.id) : next.delete(network.id)); selected.value = next; }
 function toggle(id: string, on: boolean) {
   const next = new Set(selected.value);
   on ? next.add(id) : next.delete(id);
@@ -63,7 +65,7 @@ onMounted(load);
   <FnPageHeader
     title="Networks"
     description="先暂存选择，再统一应用到官方 NetBird CLI"
-  /><FnCard
+  ><template #default><FnButton @click="selectShown(true)">全选当前</FnButton><FnButton @click="selectShown(false)">取消当前</FnButton></template></FnPageHeader><FnCard
     ><FnTabs v-model="tab"
       ><template #default="{ select, active }"
         ><button :class="{ active: active === 'all' }" @click="select('all')">

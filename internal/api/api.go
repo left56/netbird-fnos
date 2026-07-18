@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/left56/netbird-fnos/internal/netbird"
+	"github.com/left56/netbird-fnos/internal/netbird/parser"
 )
 
 type BuildInfo struct {
@@ -35,7 +36,6 @@ type clientManager interface {
 	Networks(context.Context) ([]netbird.Network, error)
 	SelectNetworks(context.Context, []string, bool) error
 	DeselectNetworks(context.Context, []string) error
-	Diagnose(context.Context) (map[string]any, error)
 }
 type binaryManager interface {
 	Resolve(context.Context) netbird.Binary
@@ -67,6 +67,18 @@ type profileManager interface {
 	SetSecret(string, string, string) error
 	ClearSecret(string, string) error
 }
+type runtimeStatusService interface {
+	Get(context.Context) (netbird.RuntimeStatus, error)
+}
+type peerService interface {
+	List(context.Context) ([]parser.Peer, error)
+}
+type networkService interface {
+	List(context.Context) (netbird.NetworkList, error)
+	Select(context.Context, []string, bool) error
+	Deselect(context.Context, []string) error
+}
+type logReader interface{ Latest() ([]string, error) }
 type response struct {
 	Status string `json:"status"`
 	Data   any    `json:"data"`
@@ -77,6 +89,10 @@ func NewHandler(logger *slog.Logger, client statusProvider, args ...any) http.Ha
 	var manager binaryManager
 	var life lifecycle
 	var profiles profileManager
+	var runtime runtimeStatusService
+	var peers peerService
+	var networks networkService
+	var logs logReader
 	var build BuildInfo
 	if len(args) == 1 {
 		build, _ = args[0].(BuildInfo)
@@ -92,6 +108,23 @@ func NewHandler(logger *slog.Logger, client statusProvider, args ...any) http.Ha
 		life, _ = args[1].(lifecycle)
 		profiles, _ = args[2].(profileManager)
 		build, _ = args[3].(BuildInfo)
+	} else if len(args) == 7 {
+		manager, _ = args[0].(binaryManager)
+		life, _ = args[1].(lifecycle)
+		profiles, _ = args[2].(profileManager)
+		runtime, _ = args[3].(runtimeStatusService)
+		peers, _ = args[4].(peerService)
+		networks, _ = args[5].(networkService)
+		build, _ = args[6].(BuildInfo)
+	} else if len(args) == 8 {
+		manager, _ = args[0].(binaryManager)
+		life, _ = args[1].(lifecycle)
+		profiles, _ = args[2].(profileManager)
+		runtime, _ = args[3].(runtimeStatusService)
+		peers, _ = args[4].(peerService)
+		networks, _ = args[5].(networkService)
+		logs, _ = args[6].(logReader)
+		build, _ = args[7].(BuildInfo)
 	}
 	if manager == nil {
 		manager = unavailableManager{}
@@ -102,13 +135,30 @@ func NewHandler(logger *slog.Logger, client statusProvider, args ...any) http.Ha
 	if profiles == nil {
 		profiles = unavailableProfiles{}
 	}
+	if runtime == nil {
+		runtime = legacyStatusService{client: client}
+	}
+	if peers == nil {
+		peers = unavailablePeers{}
+	}
+	if networks == nil {
+		networks = legacyNetworks{client: features}
+	}
+	if logs == nil {
+		logs = unavailableLogs{}
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, response{Status: "ok", Data: map[string]string{"service": "netbird-fnos-api"}})
 	})
 	mux.HandleFunc("GET /api/version", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, response{Status: "ok", Data: build}) })
 	mux.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, response{Status: "ok", Data: client.Status(r.Context())})
+		v, err := runtime.Get(r.Context())
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "status unavailable")
+			return
+		}
+		writeJSON(w, response{Status: "ok", Data: v})
 	})
 	mux.HandleFunc("POST /api/connect", func(w http.ResponseWriter, r *http.Request) {
 		if !admin(w, r) {
@@ -278,11 +328,7 @@ func NewHandler(logger *slog.Logger, client statusProvider, args ...any) http.Ha
 		})
 	}
 	mux.HandleFunc("GET /api/networks", func(w http.ResponseWriter, r *http.Request) {
-		if features == nil {
-			writeError(w, 503, "client unavailable")
-			return
-		}
-		v, e := features.Networks(r.Context())
+		v, e := networks.List(r.Context())
 		if e != nil {
 			writeError(w, 409, "networks unavailable")
 			return
@@ -290,7 +336,7 @@ func NewHandler(logger *slog.Logger, client statusProvider, args ...any) http.Ha
 		writeJSON(w, response{Status: "ok", Data: v})
 	})
 	mux.HandleFunc("POST /api/networks/select", func(w http.ResponseWriter, r *http.Request) {
-		if !admin(w, r) || features == nil {
+		if !admin(w, r) {
 			return
 		}
 		var b struct {
@@ -300,14 +346,14 @@ func NewHandler(logger *slog.Logger, client statusProvider, args ...any) http.Ha
 		if !decode(w, r, &b) {
 			return
 		}
-		if e := features.SelectNetworks(r.Context(), b.IDs, b.Append); e != nil {
+		if e := networks.Select(r.Context(), b.IDs, b.Append); e != nil {
 			writeError(w, 400, "network selection failed")
 			return
 		}
 		writeJSON(w, response{Status: "ok", Data: true})
 	})
 	mux.HandleFunc("POST /api/networks/deselect", func(w http.ResponseWriter, r *http.Request) {
-		if !admin(w, r) || features == nil {
+		if !admin(w, r) {
 			return
 		}
 		var b struct {
@@ -316,19 +362,27 @@ func NewHandler(logger *slog.Logger, client statusProvider, args ...any) http.Ha
 		if !decode(w, r, &b) {
 			return
 		}
-		if e := features.DeselectNetworks(r.Context(), b.IDs); e != nil {
+		if e := networks.Deselect(r.Context(), b.IDs); e != nil {
 			writeError(w, 400, "network deselection failed")
 			return
 		}
 		writeJSON(w, response{Status: "ok", Data: true})
 	})
-	mux.HandleFunc("GET /api/diagnostics", func(w http.ResponseWriter, r *http.Request) {
-		if features == nil {
-			writeError(w, 503, "client unavailable")
+	mux.HandleFunc("GET /api/peers", func(w http.ResponseWriter, r *http.Request) {
+		v, e := peers.List(r.Context())
+		if e != nil {
+			writeError(w, http.StatusServiceUnavailable, "peers unavailable")
 			return
 		}
-		v, _ := features.Diagnose(r.Context())
 		writeJSON(w, response{Status: "ok", Data: v})
+	})
+	mux.HandleFunc("GET /api/logs/latest", func(w http.ResponseWriter, _ *http.Request) {
+		lines, err := logs.Latest()
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "logs unavailable")
+			return
+		}
+		writeJSON(w, response{Status: "ok", Data: map[string]any{"lines": lines}})
 	})
 	mux.HandleFunc("GET /api/client", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, response{Status: "ok", Data: manager.Resolve(r.Context())})
@@ -512,6 +566,71 @@ func NewHandler(logger *slog.Logger, client statusProvider, args ...any) http.Ha
 type unavailableManager struct{}
 type unavailableLifecycle struct{}
 type unavailableProfiles struct{}
+type unavailablePeers struct{}
+type unavailableLogs struct{}
+
+// These adapters keep the small handler test constructor backward compatible.
+// The production entrypoint always injects the dedicated runtime services.
+type legacyStatusService struct{ client statusProvider }
+
+func (s legacyStatusService) Get(ctx context.Context) (netbird.RuntimeStatus, error) {
+	v := s.client.Status(ctx)
+	return netbird.RuntimeStatus{Connection: netbird.RuntimeConnection{Connected: v.Connected, Management: v.State}}, nil
+}
+
+type legacyNetworks struct{ client clientManager }
+
+func (s legacyNetworks) List(ctx context.Context) (netbird.NetworkList, error) {
+	if s.client == nil {
+		return netbird.NetworkList{}, os.ErrNotExist
+	}
+	v, e := s.client.Networks(ctx)
+	return netbird.NetworkList{All: v, Overlapping: []netbird.Network{}, ExitNodes: []netbird.Network{}, Selected: []netbird.Network{}, Pending: []netbird.Network{}}, e
+}
+func (s legacyNetworks) Select(ctx context.Context, ids []string, appendMode bool) error {
+	if s.client == nil {
+		return os.ErrNotExist
+	}
+	return s.client.SelectNetworks(ctx, ids, appendMode)
+}
+func (s legacyNetworks) Deselect(ctx context.Context, ids []string) error {
+	if s.client == nil {
+		return os.ErrNotExist
+	}
+	return s.client.DeselectNetworks(ctx, ids)
+}
+func (unavailablePeers) List(context.Context) ([]parser.Peer, error) { return nil, os.ErrNotExist }
+func (unavailableLogs) Latest() ([]string, error)                    { return []string{}, nil }
+
+// NewLogReader provides a bounded, redacted view of the wrapper log. The
+// netbird CLI is never asked for logs and secrets are removed defensively.
+func NewLogReader(filename string) logReader { return fileLogReader{filename: filename} }
+
+type fileLogReader struct{ filename string }
+
+func (r fileLogReader) Latest() ([]string, error) {
+	data, err := os.ReadFile(r.filename)
+	if err != nil {
+		return nil, err
+	}
+	all := strings.Split(string(data), "\n")
+	if len(all) > 100 {
+		all = all[len(all)-100:]
+	}
+	for i := range all {
+		all[i] = redactLogLine(all[i])
+	}
+	return all, nil
+}
+func redactLogLine(line string) string {
+	lower := strings.ToLower(line)
+	for _, marker := range []string{"setupkey", "setup_key", "preshared", "token", "privatekey", "private_key"} {
+		if strings.Contains(lower, marker) {
+			return "[sensitive log entry redacted]"
+		}
+	}
+	return line
+}
 
 func (unavailableProfiles) List(context.Context) ([]netbird.ProfileDetail, error) {
 	return nil, os.ErrNotExist

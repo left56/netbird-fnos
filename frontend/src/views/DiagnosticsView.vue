@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { api } from '../api'
-const data=ref<any>();const error=ref('')
-async function load(){try{data.value=await api('/api/diagnostics')}catch{error.value='诊断不可用。'}}
-onMounted(load)
+import { onMounted, ref } from "vue";
+import { api } from "../api"; import FnButton from "../components/FnButton.vue"; import FnCard from "../components/FnCard.vue"; import FnPageHeader from "../components/FnPageHeader.vue";
+const lines=ref<string[]>([]), error=ref("");
+async function load(){try{const result=await api<any>("/api/logs/latest");lines.value=result.lines||[];error.value=""}catch{error.value="日志暂不可用。"}}
+async function copy(){try{await navigator.clipboard.writeText(lines.value.join("\n"))}catch{error.value="无法复制日志。"}}
+function download(){const blob=new Blob([lines.value.join("\n")+"\n"],{type:"text/plain"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="netbird-fnos-latest.log";a.click();URL.revokeObjectURL(url)}
+onMounted(load);
 </script>
-<template><section><h2>日志与诊断</h2><p>只显示官方 CLI 的安全状态摘要；认证令牌和密钥不会返回。</p><p v-if="error">{{error}}</p><dl v-else-if="data?.status"><dt>连接状态</dt><dd>{{data.status.state}}</dd><dt>连接</dt><dd>{{data.status.connected?'是':'否'}}</dd></dl><button @click="load">刷新诊断</button></section></template><style scoped>dl{display:grid;grid-template-columns:8rem 1fr;gap:.5rem}dt{font-weight:bold}</style>
+<template><FnPageHeader title="日志与诊断" description="最近 100 行包装器日志；潜在敏感字段会被隐藏"><template #default><FnButton @click="load">刷新</FnButton><FnButton @click="copy">复制</FnButton><FnButton variant="primary" @click="download">下载</FnButton></template></FnPageHeader><FnCard><p v-if="error" class="error">{{error}}</p><pre v-else>{{lines.length ? lines.join('\n') : '暂无日志。'}}</pre></FnCard></template>
+<style scoped>pre{margin:0;max-height:620px;overflow:auto;padding:14px;border-radius:10px;background:#111827;color:#d1d5db;font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word}.error{color:#c43226}</style>

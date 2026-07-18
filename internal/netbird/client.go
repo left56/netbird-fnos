@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/left56/netbird-fnos/internal/netbird/parser"
 )
 
 type Runner interface {
@@ -43,10 +45,11 @@ type Profile struct {
 	LastConnectedAt string `json:"lastConnectedAt,omitempty"`
 }
 type Network struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Selected bool   `json:"selected"`
-	ExitNode bool   `json:"exitNode"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Selected    bool   `json:"selected"`
+	ExitNode    bool   `json:"exitNode"`
+	Overlapping bool   `json:"overlap"`
 }
 type ConnectOptions struct {
 	AllowServerSSH      bool `json:"allowServerSSH"`
@@ -163,7 +166,12 @@ func (c Client) Networks(ctx context.Context) ([]Network, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseNetworks(string(out)), nil
+	parsed := parser.NetworksText(string(out))
+	result := make([]Network, 0, len(parsed))
+	for _, n := range parsed {
+		result = append(result, Network{ID: n.ID, Name: n.Name, Selected: n.Selected, ExitNode: n.ExitNode, Overlapping: n.Overlapping})
+	}
+	return result, nil
 }
 func (c Client) SelectNetworks(ctx context.Context, ids []string, appendMode bool) error {
 	if len(ids) == 0 || len(ids) > 64 {
@@ -196,14 +204,6 @@ func (c Client) DeselectNetworks(ctx context.Context, ids []string) error {
 	_, err := c.run(ctx, args...)
 	return err
 }
-func (c Client) Diagnose(ctx context.Context) (map[string]any, error) {
-	status := c.Status(ctx)
-	out, err := c.run(ctx, "status", "--json")
-	if err != nil {
-		return map[string]any{"status": status}, nil
-	}
-	return map[string]any{"status": status, "peers": safePeers(out)}, nil
-}
 func (c Client) run(ctx context.Context, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
@@ -227,45 +227,6 @@ func parseProfiles(out string) []Profile {
 		}
 		p.Active = strings.Contains(line, "✓") || strings.Contains(strings.ToLower(line), "active")
 		result = append(result, p)
-	}
-	return result
-}
-func parseNetworks(out string) []Network {
-	var result []Network
-	for _, line := range strings.Split(out, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 2 || strings.EqualFold(fields[0], "ID") {
-			continue
-		}
-		n := Network{ID: fields[0], Name: fields[1], Selected: strings.Contains(line, "✓") || strings.Contains(strings.ToLower(line), "selected"), ExitNode: strings.Contains(strings.ToLower(line), "exit")}
-		result = append(result, n)
-	}
-	return result
-}
-func safePeers(raw []byte) []map[string]string {
-	var value map[string]any
-	if json.Unmarshal(raw, &value) != nil {
-		return nil
-	}
-	peers, ok := value["peers"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	result := make([]map[string]string, 0, len(peers))
-	for _, rawPeer := range peers {
-		peer, ok := rawPeer.(map[string]any)
-		if !ok {
-			continue
-		}
-		item := map[string]string{}
-		for _, key := range []string{"fqdn", "ip", "status", "connectionStatus", "connectionType"} {
-			if v, ok := peer[key].(string); ok {
-				item[key] = v
-			}
-		}
-		if len(item) > 0 {
-			result = append(result, item)
-		}
 	}
 	return result
 }

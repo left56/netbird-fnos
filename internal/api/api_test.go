@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/left56/netbird-fnos/internal/netbird"
+	"github.com/left56/netbird-fnos/internal/netbird/parser"
 )
 
 type fakeStatus struct{}
@@ -27,9 +29,57 @@ func TestStatusHasStableUnavailableResponse(t *testing.T) {
 	if r.Code != http.StatusOK {
 		t.Fatalf("got %d", r.Code)
 	}
-	want := `{"status":"ok","data":{"state":"unavailable","connected":false,"detail":"official NetBird CLI is not installed"}}` + "\n"
-	if r.Body.String() != want {
-		t.Fatalf("got %s", r.Body.String())
+	var payload struct {
+		Data netbird.RuntimeStatus `json:"data"`
+	}
+	if err := json.Unmarshal(r.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Data.Connection.Connected || payload.Data.Connection.Management != "unavailable" {
+		t.Fatalf("unexpected stable unavailable response: %s", r.Body.String())
+	}
+}
+
+type fakeRuntimeService struct{}
+
+func (fakeRuntimeService) Get(context.Context) (netbird.RuntimeStatus, error) {
+	return netbird.RuntimeStatus{Connection: netbird.RuntimeConnection{Connected: true}, Statistics: netbird.RuntimeStatistics{PeerCount: 1}}, nil
+}
+
+type fakePeerService struct{}
+
+func (fakePeerService) List(context.Context) ([]parser.Peer, error) {
+	return []parser.Peer{{ID: "peer-1", Connected: true}}, nil
+}
+
+type fakeNetworkService struct{}
+
+func (fakeNetworkService) List(context.Context) (netbird.NetworkList, error) {
+	return netbird.NetworkList{All: []netbird.Network{{ID: "n1", Name: "office"}}, Capabilities: netbird.Capabilities{Networks: true}}, nil
+}
+func (fakeNetworkService) Select(context.Context, []string, bool) error { return nil }
+func (fakeNetworkService) Deselect(context.Context, []string) error     { return nil }
+
+func TestRuntimeEndpointsUseServices(t *testing.T) {
+	h := NewHandler(testLogger(), fakeStatus{}, nil, nil, nil, fakeRuntimeService{}, fakePeerService{}, fakeNetworkService{}, BuildInfo{})
+	for _, route := range []string{"/api/status", "/api/peers", "/api/networks"} {
+		r := httptest.NewRecorder()
+		h.ServeHTTP(r, httptest.NewRequest(http.MethodGet, route, nil))
+		if r.Code != http.StatusOK {
+			t.Fatalf("%s status=%d body=%s", route, r.Code, r.Body.String())
+		}
+	}
+}
+
+func TestLogReaderRedactsSensitiveLines(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "api.log")
+	mustWrite(t, file, "safe line\nsetup_key=do-not-return\n")
+	lines, err := NewLogReader(file).Latest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.Join(lines, "\n"), "do-not-return") {
+		t.Fatalf("secret leaked in %q", lines)
 	}
 }
 
