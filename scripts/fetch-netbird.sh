@@ -25,5 +25,10 @@ binary="$(find "$tmp" -type f -name netbird -perm -u+x -print -quit)"
 test -n "$binary"
 file "$binary" | grep -Eq "(x86-64|aarch64|ARM aarch64)"
 case "$target_arch" in x86_64) file "$binary" | grep -q 'x86-64' ;; arm64) file "$binary" | grep -Eq 'aarch64|ARM aarch64' ;; esac
-"$binary" version
+if [ "$target_arch" = arm64 ] && [ "$(uname -m)" = x86_64 ]; then
+  command -v qemu-aarch64-static >/dev/null
+  qemu-aarch64-static "$binary" version
+else
+  "$binary" version
+fi
 install -Dm755 "$binary" "$destination"

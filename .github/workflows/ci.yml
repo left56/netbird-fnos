@@ -44,8 +44,8 @@ jobs:
         with: { go-version: '1.26.x' }
       - uses: actions/setup-node@v5
         with: { node-version: '22.x', cache: npm, cache-dependency-path: frontend/package-lock.json }
-      - name: Install ShellCheck
-        run: sudo apt-get update && sudo apt-get install --yes shellcheck
+      - name: Install packaging validators
+        run: sudo apt-get update && sudo apt-get install --yes shellcheck qemu-user-static
       - name: Validate fnOS metadata and lifecycle scripts
         run: |
           jq empty config/privilege config/resource app/ui/config
