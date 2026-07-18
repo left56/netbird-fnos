@@ -52,7 +52,7 @@ verify-fpk:
 	@tar -xOzf netbird-fnos.fpk manifest | grep -E '^version[[:space:]]*=[[:space:]]*0.2.0$$' >/dev/null
 	@for script in cmd/main cmd/install_init cmd/install_callback cmd/upgrade_init cmd/upgrade_callback cmd/uninstall_init cmd/uninstall_callback; do tar -tzvf netbird-fnos.fpk "$$script" | grep -Eq '^-rwx'; ! tar -xOzf netbird-fnos.fpk "$$script" | grep -q "$$(printf '\r')"; done
 	@tar -xOzf netbird-fnos.fpk app.tgz | tar -tz | grep -qx bin/netbird
-	@tar -xOzf netbird-fnos.fpk app.tgz | tar -tvf - bin/netbird | grep -Eq '^-rwx'
+	@tar -xOzf netbird-fnos.fpk app.tgz | tar -tvzf - bin/netbird | grep -Eq '^-rwx'
 	@tar -xOzf netbird-fnos.fpk app.tgz | tar -xzO www/index.html | grep -Eq '/app/netbird-fnos/assets/'
 	@! tar -xOzf netbird-fnos.fpk app.tgz | tar -xzO www/index.html | grep -Eq '(src|href)="(\./assets/|/assets/)'
 	@tmpdir="$$(mktemp -d)"; trap 'rm -rf "$$tmpdir"' EXIT; mkdir "$$tmpdir/app"; tar -xzf netbird-fnos.fpk -C "$$tmpdir" ICON.PNG ICON_256.PNG app.tgz; tar -xzf "$$tmpdir/app.tgz" -C "$$tmpdir/app"; cmp -s "$$tmpdir/ICON.PNG" ICON.PNG; cmp -s "$$tmpdir/ICON_256.PNG" ICON_256.PNG; for icon in icon_64.png icon_256.png; do test -f "$$tmpdir/app/ui/images/$$icon"; cmp -s "$$tmpdir/app/ui/images/$$icon" "app/ui/images/$$icon"; done
