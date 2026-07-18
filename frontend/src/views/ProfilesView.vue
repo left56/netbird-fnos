@@ -1,11 +1,182 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { api, json } from '../api'
-const profiles=ref<any[]>([]);const name=ref('');const error=ref('')
-async function load(){try{profiles.value=await api('/api/profiles')}catch{error.value='Profiles 不可用。'}}
-async function add(){try{await api('/api/profiles',json({name:name.value}));name.value='';await load()}catch{error.value='无法新建 Profile。'}}
-async function choose(p:any){try{await api(`/api/profiles/${encodeURIComponent(p.id)}/select`,json({}));await load()}catch{error.value='无法切换 Profile。'}}
-async function remove(p:any){if(!confirm(`删除 ${p.name}？`))return;try{await api(`/api/profiles/${encodeURIComponent(p.id)}`,{method:'DELETE'});await load()}catch{error.value='无法删除活动或默认 Profile。'}}
-onMounted(load)
+import { onMounted, ref } from "vue";
+import { api, json } from "../api";
+import FnButton from "../components/FnButton.vue";
+import FnCard from "../components/FnCard.vue";
+import FnDialog from "../components/FnDialog.vue";
+import FnFormItem from "../components/FnFormItem.vue";
+import FnInput from "../components/FnInput.vue";
+import FnPageHeader from "../components/FnPageHeader.vue";
+import FnSwitch from "../components/FnSwitch.vue";
+import FnTag from "../components/FnTag.vue";
+const profiles = ref<any[]>([]),
+  error = ref(""),
+  createOpen = ref(false),
+  draft = ref({
+    name: "",
+    managementURL: "",
+    setupKey: "",
+    presharedKey: "",
+    selectAfterCreate: true,
+    connectAfterCreate: false,
+  });
+async function load() {
+  try {
+    profiles.value = await api<any[]>("/api/profiles");
+    error.value = "";
+  } catch (e) {
+    error.value = "当前版本不支持多 Profile，或官方客户端不可用。";
+  }
+}
+async function create() {
+  try {
+    await api("/api/profiles", json(draft.value));
+    createOpen.value = false;
+    await load();
+  } catch {
+    error.value = "无法创建 Profile。";
+  }
+}
+async function select(p: any) {
+  if (p.active || !confirm("切换 Profile 会中断当前连接，继续吗？")) return;
+  await api(`/api/profiles/${encodeURIComponent(p.id)}/select`, json({}));
+  await load();
+}
+async function remove(p: any) {
+  if (p.id === "default" || p.active) {
+    error.value = "default 或当前 Profile 不能删除。";
+    return;
+  }
+  if (!confirm(`删除 ${p.name}？`)) return;
+  try {
+    await api(`/api/profiles/${encodeURIComponent(p.id)}`, {
+      method: "DELETE",
+    });
+    await load();
+  } catch {
+    error.value = "已连接的 Profile 必须先断开。";
+  }
+}
+onMounted(load);
 </script>
-<template><section><h2>Profiles</h2><p v-if="error">{{error}}</p><form @submit.prevent="add"><input v-model="name" maxlength="128" placeholder="新 Profile 名称" required><button>新建</button></form><table><thead><tr><th>名称</th><th>ID</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="p in profiles" :key="p.id"><td>{{p.name}}</td><td>{{p.id}}</td><td>{{p.active?'活动':'—'}}</td><td><button @click="choose(p)">切换</button><button @click="remove(p)">删除</button></td></tr></tbody></table></section></template><style scoped>form{margin-bottom:1rem}input{margin-right:.5rem}table{width:100%;border-collapse:collapse}td,th{padding:.5rem;border-bottom:1px solid #ddd;text-align:left}</style>
+<template>
+  <FnPageHeader
+    title="Profiles"
+    description="在不同的 NetBird 帐户与网络配置之间安全切换"
+    ><template #default
+      ><FnButton variant="primary" @click="createOpen = true"
+        >新建 Profile</FnButton
+      ></template
+    ></FnPageHeader
+  >
+  <p v-if="error" class="error">{{ error }}</p>
+  <div class="grid">
+    <FnCard v-for="p in profiles" :key="p.id" class="profile"
+      ><div class="card-head">
+        <div>
+          <h3>{{ p.name }}</h3>
+          <small>{{ p.id }}</small>
+        </div>
+        <div>
+          <FnTag v-if="p.active" type="success">当前活动</FnTag
+          ><FnTag v-if="p.id === 'default'" type="primary">默认</FnTag>
+        </div>
+      </div>
+      <dl>
+        <dt>连接状态</dt>
+        <dd>{{ p.connected ? "已连接" : "未连接" }}</dd>
+        <dt>Management URL</dt>
+        <dd>{{ p.managementURL || "未配置" }}</dd>
+        <dt>NetBird IP</dt>
+        <dd>{{ p.netbirdIP || "—" }}</dd>
+        <dt>Networks / Exit Node</dt>
+        <dd>{{ p.enabledNetworks || 0 }} 个 / {{ p.exitNode || "未选择" }}</dd>
+        <dt>最后连接</dt>
+        <dd>{{ p.lastConnectedAt || "—" }}</dd>
+      </dl>
+      <div class="actions">
+        <FnButton @click="select(p)">切换</FnButton><FnButton>编辑配置</FnButton
+        ><FnButton
+          :disabled="p.id === 'default' || p.active"
+          variant="danger"
+          @click="remove(p)"
+          >删除</FnButton
+        >
+      </div></FnCard
+    >
+  </div>
+  <FnDialog :open="createOpen" title="新建 Profile" @close="createOpen = false"
+    ><div class="form">
+      <FnFormItem label="Profile 名称"
+        ><FnInput
+          v-model="draft.name"
+          placeholder="例如：工作网络" /></FnFormItem
+      ><FnFormItem label="Management URL"
+        ><FnInput
+          v-model="draft.managementURL"
+          placeholder="https://api.netbird.io" /></FnFormItem
+      ><FnFormItem label="Setup Key（可选）"
+        ><FnInput v-model="draft.setupKey" type="password" /></FnFormItem
+      ><FnFormItem label="Pre-shared Key（可选）"
+        ><FnInput v-model="draft.presharedKey" type="password" /></FnFormItem
+      ><label>创建后切换 <FnSwitch v-model="draft.selectAfterCreate" /></label
+      ><label>创建后连接 <FnSwitch v-model="draft.connectAfterCreate" /></label>
+    </div>
+    <template #footer
+      ><FnButton @click="createOpen = false">取消</FnButton
+      ><FnButton variant="primary" @click="create">创建</FnButton></template
+    ></FnDialog
+  >
+</template>
+<style scoped>
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+.profile {
+  padding: 18px;
+}
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.card-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.card-head small {
+  color: var(--fn-muted);
+}
+dl {
+  display: grid;
+  grid-template-columns: 125px 1fr;
+  gap: 8px;
+  margin: 18px 0;
+  font-size: 13px;
+}
+dt {
+  color: var(--fn-muted);
+}
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+}
+.form {
+  display: grid;
+  gap: 15px;
+}
+.form label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.error {
+  color: #c43226;
+}
+</style>

@@ -6,7 +6,6 @@ import ClientView from './views/ClientView.vue'
 import PeersView from './views/PeersView.vue'
 import NetworksView from './views/NetworksView.vue'
 import ProfilesView from './views/ProfilesView.vue'
-import SettingsView from './views/SettingsView.vue'
 import DiagnosticsView from './views/DiagnosticsView.vue'
 
 const router = createRouter({
@@ -17,7 +16,6 @@ const router = createRouter({
     { path: '/peers', component: PeersView },
     { path: '/networks', component: NetworksView },
     { path: '/profiles', component: ProfilesView },
-    { path: '/settings', component: SettingsView },
     { path: '/diagnostics', component: DiagnosticsView },
   ],
 })

@@ -1,11 +1,34 @@
 <script setup lang="ts">
-const links = [['/', '概览'], ['/peers', 'Peers'], ['/networks', 'Networks'], ['/profiles', 'Profiles'], ['/settings', '设置'], ['/diagnostics', '日志与诊断'], ['/client', '客户端管理']]
+import FnSidebar from "./components/FnSidebar.vue";
+const links = [
+  { path: "/", label: "概览" },
+  { path: "/peers", label: "Peers" },
+  { path: "/networks", label: "Networks" },
+  { path: "/profiles", label: "Profiles" },
+  { path: "/diagnostics", label: "日志与诊断" },
+  { path: "/client", label: "客户端管理" },
+];
 </script>
-
 <template>
-  <main><header><h1>NetBird for fnOS</h1><nav><RouterLink v-for="[path, name] in links" :key="path" :to="path">{{ name }}</RouterLink></nav></header><RouterView /></main>
+  <div class="shell">
+    <FnSidebar :items="links" />
+    <main><RouterView /></main>
+  </div>
 </template>
-
 <style>
-body { margin: 0; font-family: system-ui, sans-serif; background: #f6f8fa; color: #1f2937; } main { max-width: 960px; margin: auto; padding: 2rem; } header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; } nav { display: flex; gap: 1rem; } a { color: #0969da; } section { background: white; border-radius: 8px; padding: 1.5rem; margin-top: 2rem; } pre { background: #f6f8fa; padding: 1rem; overflow: auto; }
+@import "./styles/fn.css";
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+main {
+  flex: 1;
+  margin: 20px;
+  padding: 26px;
+  background: #fff;
+  border: 1px solid var(--fn-border);
+  border-radius: 16px;
+  box-shadow: 0 2px 10px #10182808;
+  min-width: 0;
+}
 </style>

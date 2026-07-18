@@ -31,9 +31,16 @@ type Status struct {
 	Detail    string `json:"detail,omitempty"`
 }
 type Profile struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Active bool   `json:"active"`
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Active          bool   `json:"active"`
+	Default         bool   `json:"default"`
+	Connected       bool   `json:"connected"`
+	ManagementURL   string `json:"managementURL,omitempty"`
+	NetBirdIP       string `json:"netbirdIP,omitempty"`
+	EnabledNetworks int    `json:"enabledNetworks"`
+	ExitNode        string `json:"exitNode,omitempty"`
+	LastConnectedAt string `json:"lastConnectedAt,omitempty"`
 }
 type Network struct {
 	ID       string `json:"id"`
@@ -107,7 +114,21 @@ func (c Client) Profiles(ctx context.Context) ([]Profile, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseProfiles(string(out)), nil
+	profiles := parseProfiles(string(out))
+	// NetBird guarantees a default profile for profile-capable clients. Empty
+	// table output is observed before the first persisted profile is rendered;
+	// verify the controlled CLI status and report that real default identity.
+	if len(profiles) == 0 {
+		status := c.Status(ctx)
+		if status.State != "unavailable" {
+			return []Profile{{ID: "default", Name: "default", Default: true, Active: true, Connected: status.Connected}}, nil
+		}
+	}
+	for i := range profiles {
+		profiles[i].Default = profiles[i].ID == "default"
+		profiles[i].Connected = profiles[i].Active && c.Status(ctx).Connected
+	}
+	return profiles, nil
 }
 func (c Client) AddProfile(ctx context.Context, name string) error {
 	if !safeValue(name) {
@@ -200,7 +221,7 @@ func parseProfiles(out string) []Profile {
 		if len(fields) < 2 || strings.EqualFold(fields[0], "ID") {
 			continue
 		}
-		p := Profile{ID: fields[0], Name: strings.Join(fields[1:len(fields)-1], " ")}
+		p := Profile{ID: fields[0], Name: strings.Join(fields[1:len(fields)-1], " "), Default: fields[0] == "default"}
 		if len(fields) == 2 {
 			p.Name = fields[1]
 		}
