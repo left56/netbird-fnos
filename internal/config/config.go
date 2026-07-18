@@ -16,12 +16,15 @@ const (
 
 type Config struct {
 	ListenAddr     string
+	SocketPath     string
+	GatewayPrefix  string
+	WebRoot        string
 	NetBirdBinary  string
 	CommandTimeout time.Duration
 }
 
 func Load() (Config, error) {
-	cfg := Config{ListenAddr: value("NB_FNOS_LISTEN_ADDR", defaultListenAddr), NetBirdBinary: value("NB_FNOS_NETBIRD_BINARY", defaultBinary), CommandTimeout: defaultTimeout}
+	cfg := Config{ListenAddr: value("NB_FNOS_LISTEN_ADDR", defaultListenAddr), SocketPath: os.Getenv("NB_FNOS_SOCKET"), GatewayPrefix: value("NB_FNOS_GATEWAY_PREFIX", "/"), WebRoot: os.Getenv("NB_FNOS_WEB_ROOT"), NetBirdBinary: value("NB_FNOS_NETBIRD_BINARY", defaultBinary), CommandTimeout: defaultTimeout}
 	if raw := os.Getenv("NB_FNOS_COMMAND_TIMEOUT_SECONDS"); raw != "" {
 		seconds, err := strconv.Atoi(raw)
 		if err != nil || seconds <= 0 {
@@ -32,8 +35,13 @@ func Load() (Config, error) {
 	if cfg.NetBirdBinary == "" {
 		return Config{}, fmt.Errorf("NB_FNOS_NETBIRD_BINARY must not be empty")
 	}
-	if err := loopbackAddress(cfg.ListenAddr); err != nil {
-		return Config{}, err
+	if cfg.SocketPath == "" {
+		if err := loopbackAddress(cfg.ListenAddr); err != nil {
+			return Config{}, err
+		}
+	}
+	if cfg.GatewayPrefix == "" || cfg.GatewayPrefix[0] != '/' {
+		return Config{}, fmt.Errorf("NB_FNOS_GATEWAY_PREFIX must start with /")
 	}
 	return cfg, nil
 }

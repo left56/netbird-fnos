@@ -1,15 +1,5 @@
-# Provisional fnOS package layout
+# fnOS package layout
 
-`manifest/` is intentionally a TODO-only placeholder until fnOS metadata requirements are verified. The package payload produced by `make package` is:
+This repository follows the fnOS package structure: `manifest`, `config/`, `cmd/`, `app/`, `wizard/`, `ICON.PNG`, and `ICON_256.PNG` are at the package root. `cmd/main` implements the documented `start`, `stop`, and `status` actions; installation, upgrade, and uninstall hooks use the matching `cmd/*_init` and `cmd/*_callback` entry points.
 
-```
-app/bin/netbird-fnos-api
-app/etc/netbird-fnos.env.example
-app/systemd/netbird-fnos-api.service
-app/var/
-app/web/
-scripts/{install,start,stop,upgrade,uninstall}.sh
-manifest/
-```
-
-Lifecycle scripts are strict and idempotent. Uninstall retains the official NetBird identity data; `PURGE_NETBIRD_FNOS_STATE=1` removes only the wrapper state directory.
+The service listens on `${TRIM_APPDEST}/app.sock` and is exposed through the official unified-gateway entry `/app/netbird-fnos`. Runtime files use only `TRIM_APPDEST`, `TRIM_PKGETC`, and `TRIM_PKGVAR`; no systemd unit or `/opt`, `/etc`, or `/var/lib` path is installed by this package.

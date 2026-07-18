@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/left56/netbird-fnos/internal/netbird"
 )
@@ -43,5 +44,22 @@ func logging(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logger.Info("HTTP request", "method", r.Method, "path", r.URL.Path)
 		next.ServeHTTP(w, r)
+	})
+}
+
+func WithStaticFiles(api http.Handler, prefix, root string) http.Handler {
+	files := http.FileServer(http.Dir(root))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, prefix)
+		if path == "" {
+			path = "/"
+		}
+		if strings.HasPrefix(path, "/api/") {
+			http.StripPrefix(prefix, api).ServeHTTP(w, r)
+			return
+		}
+		request := r.Clone(r.Context())
+		request.URL.Path = path
+		files.ServeHTTP(w, request)
 	})
 }

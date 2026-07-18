@@ -1,6 +1,6 @@
 # Local API
 
-All endpoints return `{"status":"ok","data":...}` and are local-only by default.
+All endpoints return `{"status":"ok","data":...}` and are served through the fnOS unified gateway at `/app/netbird-fnos`.
 
 | Endpoint | Data |
 | --- | --- |

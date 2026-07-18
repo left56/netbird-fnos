@@ -2,10 +2,10 @@ SHELL := /usr/bin/env bash
 VERSION ?= dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-DIST := dist
-BIN := $(DIST)/bin/netbird-fnos-api
+BIN := app/bin/netbird-fnos-api
+FPK ?= fnpack
 
-.PHONY: test build frontend package clean
+.PHONY: test build frontend fpk package install-local uninstall-local clean
 
 test:
 	go test ./...
@@ -18,14 +18,20 @@ build:
 frontend:
 	npm --prefix frontend ci
 	npm --prefix frontend run build
+	rm -rf app/www/*
+	cp -R frontend/dist/. app/www/
 
-package: build frontend
-	rm -rf $(DIST)/package
-	mkdir -p $(DIST)/package
-	cp -R app manifest scripts $(DIST)/package/
-	cp $(BIN) $(DIST)/package/app/bin/
-	cp -R frontend/dist/. $(DIST)/package/app/web/
-	tar -C $(DIST) -czf $(DIST)/netbird-fnos-provisional.tar.gz package
+fpk: build frontend
+	$(FPK) build
+
+package: fpk
+
+install-local: fpk
+	appcenter-cli install "$$(find . -maxdepth 1 -name '*.fpk' -print -quit)"
+
+uninstall-local:
+	appcenter-cli uninstall netbird-fnos
 
 clean:
-	rm -rf $(DIST) frontend/dist frontend/node_modules
+	rm -f app/bin/netbird-fnos-api ./*.fpk
+	rm -rf app/www/* frontend/dist frontend/node_modules
