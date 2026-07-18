@@ -22,7 +22,7 @@ const profiles = ref<any[]>([]),
   });
 async function load() {
   try {
-    profiles.value = await api<any[]>("/api/profiles");
+    profiles.value = (await api<any[]>("/api/profiles")).map((detail) => ({ ...detail.metadata, ...detail.runtime, config: detail.config, source: detail.source }));
     error.value = "";
   } catch (e) {
     error.value = "当前版本不支持多 Profile，或官方客户端不可用。";

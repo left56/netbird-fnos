@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -53,6 +54,19 @@ type lifecycle interface {
 	DeleteSource(string) error
 	TestSource(context.Context, string) error
 }
+type profileManager interface {
+	List(context.Context) ([]netbird.ProfileDetail, error)
+	Get(context.Context, string) (netbird.ProfileDetail, error)
+	Create(context.Context, netbird.ProfileCreate) (netbird.ProfileDetail, error)
+	Update(context.Context, string, netbird.ProfileUpdate) (map[string]any, error)
+	Select(context.Context, string) error
+	Connect(context.Context, string) error
+	Disconnect(context.Context, string) error
+	Rename(context.Context, string, string) error
+	Delete(context.Context, string) error
+	SetSecret(string, string, string) error
+	ClearSecret(string, string) error
+}
 type response struct {
 	Status string `json:"status"`
 	Data   any    `json:"data"`
@@ -62,6 +76,7 @@ func NewHandler(logger *slog.Logger, client statusProvider, args ...any) http.Ha
 	features, _ := client.(clientManager)
 	var manager binaryManager
 	var life lifecycle
+	var profiles profileManager
 	var build BuildInfo
 	if len(args) == 1 {
 		build, _ = args[0].(BuildInfo)
@@ -72,12 +87,20 @@ func NewHandler(logger *slog.Logger, client statusProvider, args ...any) http.Ha
 		manager, _ = args[0].(binaryManager)
 		life, _ = args[1].(lifecycle)
 		build, _ = args[2].(BuildInfo)
+	} else if len(args) == 4 {
+		manager, _ = args[0].(binaryManager)
+		life, _ = args[1].(lifecycle)
+		profiles, _ = args[2].(profileManager)
+		build, _ = args[3].(BuildInfo)
 	}
 	if manager == nil {
 		manager = unavailableManager{}
 	}
 	if life == nil {
 		life = unavailableLifecycle{}
+	}
+	if profiles == nil {
+		profiles = unavailableProfiles{}
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -120,39 +143,42 @@ func NewHandler(logger *slog.Logger, client statusProvider, args ...any) http.Ha
 		writeJSON(w, response{Status: "ok", Data: features.Status(r.Context())})
 	})
 	mux.HandleFunc("GET /api/profiles", func(w http.ResponseWriter, r *http.Request) {
-		if features == nil {
-			writeError(w, 503, "client unavailable")
-			return
-		}
-		v, e := features.Profiles(r.Context())
+		v, e := profiles.List(r.Context())
 		if e != nil {
-			writeError(w, 409, "profiles unavailable")
+			profileFailure(w, e)
 			return
 		}
 		writeJSON(w, response{Status: "ok", Data: v})
+	})
+	mux.HandleFunc("GET /api/profiles/{id}", func(w http.ResponseWriter, r *http.Request) {
+		v, e := profiles.Get(r.Context(), r.PathValue("id"))
+		if e != nil {
+			profileFailure(w, e)
+			return
+		}
+		writeJSON(w, response{Status: "ok", Data: map[string]any{"profile": v.Metadata, "config": v.Config, "secrets": map[string]bool{"setupKeyConfigured": v.Config.SetupKeyConfigured, "presharedKeyConfigured": v.Config.PresharedKeyConfigured}, "runtime": v.Runtime, "source": v.Source, "capabilities": v.Capabilities, "restartRequiredFields": v.RestartRequiredFields}})
 	})
 	mux.HandleFunc("POST /api/profiles", func(w http.ResponseWriter, r *http.Request) {
 		if !admin(w, r) || features == nil {
 			return
 		}
-		var b struct {
-			Name string `json:"name"`
-		}
+		var b netbird.ProfileCreate
 		if !decode(w, r, &b) {
 			return
 		}
-		if e := features.AddProfile(r.Context(), b.Name); e != nil {
-			writeError(w, 400, "profile add failed")
+		v, e := profiles.Create(r.Context(), b)
+		if e != nil {
+			profileFailure(w, e)
 			return
 		}
-		writeJSON(w, response{Status: "ok", Data: true})
+		writeJSON(w, response{Status: "ok", Data: map[string]any{"created": true, "selected": v.Runtime.Active, "connected": v.Runtime.Connected, "warnings": []string{}}})
 	})
 	mux.HandleFunc("POST /api/profiles/{handle}/select", func(w http.ResponseWriter, r *http.Request) {
 		if !admin(w, r) || features == nil {
 			return
 		}
-		if e := features.SelectProfile(r.Context(), r.PathValue("handle")); e != nil {
-			writeError(w, 400, "profile selection failed")
+		if e := profiles.Select(r.Context(), r.PathValue("handle")); e != nil {
+			profileFailure(w, e)
 			return
 		}
 		writeJSON(w, response{Status: "ok", Data: true})
@@ -161,28 +187,96 @@ func NewHandler(logger *slog.Logger, client statusProvider, args ...any) http.Ha
 		if !admin(w, r) || features == nil {
 			return
 		}
+		var b netbird.ProfileUpdate
+		if !decode(w, r, &b) {
+			return
+		}
+		v, e := profiles.Update(r.Context(), r.PathValue("handle"), b)
+		if e != nil {
+			profileFailure(w, e)
+			return
+		}
+		writeJSON(w, response{Status: "ok", Data: v})
+	})
+	mux.HandleFunc("DELETE /api/profiles/{handle}", func(w http.ResponseWriter, r *http.Request) {
+		if !admin(w, r) || features == nil {
+			return
+		}
+		if e := profiles.Delete(r.Context(), r.PathValue("handle")); e != nil {
+			profileFailure(w, e)
+			return
+		}
+		writeJSON(w, response{Status: "ok", Data: true})
+	})
+	mux.HandleFunc("POST /api/profiles/{id}/connect", func(w http.ResponseWriter, r *http.Request) {
+		if !admin(w, r) {
+			return
+		}
+		if e := profiles.Connect(r.Context(), r.PathValue("id")); e != nil {
+			profileFailure(w, e)
+			return
+		}
+		writeJSON(w, response{Status: "ok", Data: true})
+	})
+	mux.HandleFunc("POST /api/profiles/{id}/disconnect", func(w http.ResponseWriter, r *http.Request) {
+		if !admin(w, r) {
+			return
+		}
+		if e := profiles.Disconnect(r.Context(), r.PathValue("id")); e != nil {
+			profileFailure(w, e)
+			return
+		}
+		writeJSON(w, response{Status: "ok", Data: true})
+	})
+	mux.HandleFunc("POST /api/profiles/{id}/rename", func(w http.ResponseWriter, r *http.Request) {
+		if !admin(w, r) {
+			return
+		}
 		var b struct {
 			Name string `json:"name"`
 		}
 		if !decode(w, r, &b) {
 			return
 		}
-		if e := features.RenameProfile(r.Context(), r.PathValue("handle"), b.Name); e != nil {
-			writeError(w, 400, "profile rename failed")
+		if e := profiles.Rename(r.Context(), r.PathValue("id"), b.Name); e != nil {
+			profileFailure(w, e)
 			return
 		}
 		writeJSON(w, response{Status: "ok", Data: true})
 	})
-	mux.HandleFunc("DELETE /api/profiles/{handle}", func(w http.ResponseWriter, r *http.Request) {
-		if !admin(w, r) || features == nil {
-			return
-		}
-		if e := features.RemoveProfile(r.Context(), r.PathValue("handle")); e != nil {
-			writeError(w, 400, "profile removal failed")
-			return
-		}
-		writeJSON(w, response{Status: "ok", Data: true})
-	})
+	for _, spec := range []struct{ kind string }{{"setup-key"}, {"preshared-key"}} {
+		kind := spec.kind
+		mux.HandleFunc("PUT /api/profiles/{id}/secrets/"+kind, func(w http.ResponseWriter, r *http.Request) {
+			if !admin(w, r) {
+				return
+			}
+			var b struct {
+				Value string `json:"value"`
+			}
+			if !decode(w, r, &b) {
+				return
+			}
+			if b.Value == "" {
+				writeProfileError(w, 422, "PROFILE_SECRET_INVALID", "密钥不能为空")
+				return
+			}
+			if e := profiles.SetSecret(r.PathValue("id"), kind, b.Value); e != nil {
+				writeProfileError(w, 422, "PROFILE_SECRET_INVALID", "密钥无效")
+				return
+			}
+			writeJSON(w, response{Status: "ok", Data: true})
+		})
+		mux.HandleFunc("DELETE /api/profiles/{id}/secrets/"+kind, func(w http.ResponseWriter, r *http.Request) {
+			if !admin(w, r) {
+				return
+			}
+			if e := profiles.ClearSecret(r.PathValue("id"), kind); e != nil {
+				profileFailure(w, e)
+				return
+			}
+			writeJSON(w, response{Status: "ok", Data: true})
+		})
+	}
 	mux.HandleFunc("GET /api/networks", func(w http.ResponseWriter, r *http.Request) {
 		if features == nil {
 			writeError(w, 503, "client unavailable")
@@ -417,6 +511,27 @@ func NewHandler(logger *slog.Logger, client statusProvider, args ...any) http.Ha
 
 type unavailableManager struct{}
 type unavailableLifecycle struct{}
+type unavailableProfiles struct{}
+
+func (unavailableProfiles) List(context.Context) ([]netbird.ProfileDetail, error) {
+	return nil, os.ErrNotExist
+}
+func (unavailableProfiles) Get(context.Context, string) (netbird.ProfileDetail, error) {
+	return netbird.ProfileDetail{}, os.ErrNotExist
+}
+func (unavailableProfiles) Create(context.Context, netbird.ProfileCreate) (netbird.ProfileDetail, error) {
+	return netbird.ProfileDetail{}, os.ErrNotExist
+}
+func (unavailableProfiles) Update(context.Context, string, netbird.ProfileUpdate) (map[string]any, error) {
+	return nil, os.ErrNotExist
+}
+func (unavailableProfiles) Select(context.Context, string) error         { return os.ErrNotExist }
+func (unavailableProfiles) Connect(context.Context, string) error        { return os.ErrNotExist }
+func (unavailableProfiles) Disconnect(context.Context, string) error     { return os.ErrNotExist }
+func (unavailableProfiles) Rename(context.Context, string, string) error { return os.ErrNotExist }
+func (unavailableProfiles) Delete(context.Context, string) error         { return os.ErrNotExist }
+func (unavailableProfiles) SetSecret(string, string, string) error       { return os.ErrNotExist }
+func (unavailableProfiles) ClearSecret(string, string) error             { return os.ErrNotExist }
 
 func (unavailableLifecycle) Check(context.Context, string, string) (netbird.Release, error) {
 	return netbird.Release{}, os.ErrNotExist
@@ -460,6 +575,25 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(response{Status: "error", Data: map[string]string{"message": message}})
+}
+func writeProfileError(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{"status": "error", "error": map[string]string{"code": code, "message": message}})
+}
+func profileFailure(w http.ResponseWriter, e error) {
+	switch {
+	case errors.Is(e, os.ErrNotExist):
+		writeProfileError(w, 404, "PROFILE_NOT_FOUND", "Profile 不存在")
+	case strings.Contains(e.Error(), "already exists"):
+		writeProfileError(w, 409, "PROFILE_ALREADY_EXISTS", "Profile 名称已存在")
+	case strings.Contains(e.Error(), "cannot be deleted"):
+		writeProfileError(w, 409, "PROFILE_ACTIVE", "当前 Profile 不能删除")
+	case strings.Contains(e.Error(), "invalid"):
+		writeProfileError(w, 422, "PROFILE_CONFIG_INVALID", "Profile 配置无效")
+	default:
+		writeProfileError(w, 409, "PROFILE_WRITE_FAILED", "Profile 操作失败")
+	}
 }
 func admin(w http.ResponseWriter, r *http.Request) bool {
 	if strings.EqualFold(r.Header.Get("X-Trim-Isadmin"), "true") || r.Header.Get("X-Trim-Isadmin") == "1" {
