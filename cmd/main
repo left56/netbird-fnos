@@ -34,6 +34,12 @@ stop_daemon() {
   if daemon_running; then
     daemon_pid="$(cat "$daemon_pid_file")"
     kill "$daemon_pid" 2>/dev/null || true
+    attempts=0
+    while daemon_running && [ "$attempts" -lt 10 ]; do sleep 1; attempts=$((attempts + 1)); done
+    if daemon_running; then
+      write_error "NetBird daemon did not stop."
+      return 1
+    fi
   fi
   rm -f "$daemon_pid_file" "$daemon_socket"
 }
@@ -49,14 +55,15 @@ case "${1:-}" in
     if ! is_running; then write_error "NetBird service failed to start; inspect $log_file."; exit 1; fi
     ;;
   stop)
-    if ! is_running; then rm -f "$pid_file" "$socket_path"; stop_daemon; exit 0; fi
-    pid="$(cat "$pid_file")"
-    kill "$pid"
-    attempts=0
-    while is_running && [ "$attempts" -lt 10 ]; do sleep 1; attempts=$((attempts + 1)); done
-    if is_running; then write_error "NetBird service did not stop."; exit 1; fi
+    if is_running; then
+      pid="$(cat "$pid_file")"
+      kill "$pid"
+      attempts=0
+      while is_running && [ "$attempts" -lt 10 ]; do sleep 1; attempts=$((attempts + 1)); done
+      if is_running; then write_error "NetBird service did not stop."; exit 1; fi
+    fi
     rm -f "$pid_file" "$socket_path"
-    stop_daemon
+    stop_daemon || exit 1
     ;;
   status) if is_running; then exit 0; fi; exit 3 ;;
   *) write_error "Unsupported lifecycle action: ${1:-empty}"; exit 1 ;;

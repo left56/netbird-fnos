@@ -50,3 +50,10 @@ func TestDefaultProfileCannotBeCreated(t *testing.T) {
 		t.Fatal("default creation was not rejected")
 	}
 }
+
+func TestProfileCreateDoesNotPersistASetupKeyWithoutConnecting(t *testing.T) {
+	svc := NewProfileService(profileServiceFake{}, NewProfileConfigStore(t.TempDir()))
+	if _, err := svc.Create(context.Background(), ProfileCreate{Name: "work", SetupKey: "one-time-key"}); err == nil {
+		t.Fatal("accepted a setup key that would be persisted without being used")
+	}
+}

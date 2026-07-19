@@ -53,6 +53,8 @@ type Network struct {
 	Overlapping bool   `json:"overlap"`
 }
 type ConnectOptions struct {
+	ManagementURL       string `json:"managementURL"`
+	SetupKey            string `json:"setupKey"`
 	AllowServerSSH      bool `json:"allowServerSSH"`
 	BlockInbound        bool `json:"blockInbound"`
 	BlockLANAccess      bool `json:"blockLANAccess"`
@@ -97,6 +99,18 @@ func (c Client) Status(ctx context.Context) Status {
 
 func (c Client) Connect(ctx context.Context, options ConnectOptions) error {
 	args := []string{"up"}
+	if options.ManagementURL != "" {
+		if !safeValue(options.ManagementURL) {
+			return errors.New("invalid management URL")
+		}
+		args = append(args, "--management-url", options.ManagementURL)
+	}
+	if options.SetupKey != "" {
+		if !safeSecret(options.SetupKey) {
+			return errors.New("invalid setup key")
+		}
+		args = append(args, "--setup-key", options.SetupKey)
+	}
 	if options.AllowServerSSH {
 		args = append(args, "--allow-server-ssh")
 	}
@@ -229,6 +243,7 @@ func (c Client) run(ctx context.Context, args ...string) ([]byte, error) {
 	return c.runner.Run(ctx, binary, args...)
 }
 func safeValue(v string) bool { return v != "" && len(v) <= 256 && !strings.ContainsAny(v, "\x00\r\n") }
+func safeSecret(v string) bool { return len(v) <= 4096 && !strings.ContainsAny(v, "\x00\r\n") }
 func parseProfiles(out string) []Profile {
 	var result []Profile
 	for _, line := range strings.Split(out, "\n") {

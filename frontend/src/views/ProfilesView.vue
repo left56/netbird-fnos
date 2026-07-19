@@ -12,6 +12,9 @@ import FnTag from "../components/FnTag.vue";
 const profiles = ref<any[]>([]),
   error = ref(""),
   createOpen = ref(false),
+  editOpen = ref(false),
+  editingID = ref(""),
+  authMessage = ref(""),
   draft = ref({
     name: "",
     managementURL: "",
@@ -20,6 +23,7 @@ const profiles = ref<any[]>([]),
     selectAfterCreate: true,
     connectAfterCreate: false,
   });
+const editDraft = ref<any>({});
 async function load() {
   try {
     profiles.value = (await api<any[]>("/api/profiles")).map((detail) => ({ ...detail.metadata, ...detail.runtime, config: detail.config, source: detail.source }));
@@ -36,7 +40,7 @@ async function create() {
       setupKey: draft.value.setupKey,
       presharedKey: draft.value.presharedKey,
       selectAfterCreate: draft.value.selectAfterCreate,
-      connectAfterCreate: draft.value.connectAfterCreate,
+      connectAfterCreate: draft.value.setupKey !== "" || draft.value.connectAfterCreate,
     }));
     createOpen.value = false;
     await load();
@@ -62,6 +66,32 @@ async function remove(p: any) {
     await load();
   } catch {
     error.value = "已连接的 Profile 必须先断开。";
+  }
+}
+function edit(p: any) {
+  editingID.value = p.id;
+  editDraft.value = { ...p.config, name: p.config?.name || p.name || "", managementURL: p.config?.managementURL || "" };
+  authMessage.value = "";
+  editOpen.value = true;
+}
+async function saveEdit() {
+  try {
+    await api(`/api/profiles/${encodeURIComponent(editingID.value)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ config: editDraft.value }) });
+    editOpen.value = false;
+    await load();
+  } catch {
+    error.value = "无法保存 Profile 配置。";
+  }
+}
+async function authenticateWithSetupKey() {
+  const setupKey = prompt("输入一次性或可复用的 NetBird Setup Key（不会保存或回显）：");
+  if (!setupKey) return;
+  try {
+    await api("/api/connect", json({ managementURL: editDraft.value.managementURL, setupKey }));
+    authMessage.value = "认证请求已提交，正在连接。";
+    await load();
+  } catch {
+    authMessage.value = "认证或连接失败；请检查 Setup Key 与 Management URL。";
   }
 }
 onMounted(load);
@@ -93,7 +123,7 @@ onMounted(load);
         <dt>连接状态</dt>
         <dd>{{ p.connected ? "已连接" : "未连接" }}</dd>
         <dt>Management URL</dt>
-        <dd>{{ p.managementURL || "未配置" }}</dd>
+        <dd>{{ p.config?.managementURL || "未配置" }}</dd>
         <dt>NetBird IP</dt>
         <dd>{{ p.netbirdIP || "—" }}</dd>
         <dt>Networks / Exit Node</dt>
@@ -102,7 +132,7 @@ onMounted(load);
         <dd>{{ p.lastConnectedAt || "—" }}</dd>
       </dl>
       <div class="actions">
-        <FnButton @click="select(p)">切换</FnButton><FnButton>编辑配置</FnButton
+        <FnButton @click="select(p)">切换</FnButton><FnButton @click="edit(p)">编辑配置</FnButton
         ><FnButton
           :disabled="p.default || p.active"
           variant="danger"
@@ -134,6 +164,19 @@ onMounted(load);
       ><FnButton variant="primary" @click="create">创建</FnButton></template
     ></FnDialog
   >
+  <FnDialog :open="editOpen" title="编辑 Profile 配置" @close="editOpen = false">
+    <div class="form">
+      <FnFormItem label="Profile 名称"><FnInput v-model="editDraft.name" /></FnFormItem>
+      <FnFormItem label="Management URL"><FnInput v-model="editDraft.managementURL" placeholder="https://api.netbird.io" /></FnFormItem>
+      <p class="hint">NAS 无桌面环境建议使用 Setup Key 认证；密钥仅随本次请求传给官方 NetBird CLI，不会被保存或显示。</p>
+      <p v-if="authMessage" :class="authMessage.startsWith('认证或') ? 'error' : 'hint'">{{ authMessage }}</p>
+    </div>
+    <template #footer>
+      <FnButton @click="authenticateWithSetupKey">使用 Setup Key 认证</FnButton>
+      <FnButton @click="editOpen = false">取消</FnButton>
+      <FnButton variant="primary" @click="saveEdit">保存</FnButton>
+    </template>
+  </FnDialog>
 </template>
 <style scoped>
 .grid {
@@ -185,5 +228,11 @@ dd {
 }
 .error {
   color: #c43226;
+}
+.hint {
+  margin: 0;
+  color: var(--fn-muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
 </style>

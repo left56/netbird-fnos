@@ -125,6 +125,9 @@ func (s *ProfileService) Create(ctx context.Context, in ProfileCreate) (ProfileD
 	if in.Config.ManagementURL == "" {
 		in.Config.ManagementURL = in.ManagementURL
 	}
+	if in.SetupKey != "" && !in.ConnectAfterCreate {
+		return ProfileDetail{}, errors.New("setup key requires connecting after creation")
+	}
 	all, e := s.cli.Profiles(ctx)
 	if e != nil {
 		return ProfileDetail{}, e
@@ -154,11 +157,6 @@ func (s *ProfileService) Create(ctx context.Context, in ProfileCreate) (ProfileD
 	if e = s.store.Put(p.ID, in.Config); e != nil {
 		return ProfileDetail{}, e
 	}
-	if in.SetupKey != "" {
-		if e = s.setSecret(p.ID, "setup-key", in.SetupKey); e != nil {
-			return ProfileDetail{}, e
-		}
-	}
 	if in.PresharedKey != "" {
 		if e = s.setSecret(p.ID, "preshared-key", in.PresharedKey); e != nil {
 			return ProfileDetail{}, e
@@ -170,7 +168,12 @@ func (s *ProfileService) Create(ctx context.Context, in ProfileCreate) (ProfileD
 		}
 	}
 	if in.ConnectAfterCreate {
-		if e = s.Connect(ctx, p.ID); e != nil {
+		if !in.SelectAfterCreate {
+			if e = s.Select(ctx, p.ID); e != nil {
+				return ProfileDetail{}, e
+			}
+		}
+		if e = s.cli.Connect(ctx, ConnectOptions{ManagementURL: in.Config.ManagementURL, SetupKey: in.SetupKey}); e != nil {
 			return ProfileDetail{}, e
 		}
 	}

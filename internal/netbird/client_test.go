@@ -60,3 +60,21 @@ func TestRuntimeCommandsUseConfiguredDaemonSocket(t *testing.T) {
 		t.Fatalf("daemon address was not used: %#v", runner.args)
 	}
 }
+
+func TestConnectPassesSetupKeyOnlyToOfficialCLI(t *testing.T) {
+	runner := &fakeRunner{}
+	client := NewClient(runner, "/opt/netbird", time.Second)
+	err := client.Connect(context.Background(), ConnectOptions{ManagementURL: "https://netbird.example", SetupKey: "one-time-key"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"up", "--management-url", "https://netbird.example", "--setup-key", "one-time-key"}
+	if len(runner.args) != len(want) {
+		t.Fatalf("unexpected command: %#v", runner.args)
+	}
+	for i := range want {
+		if runner.args[i] != want[i] {
+			t.Fatalf("unexpected command: %#v", runner.args)
+		}
+	}
+}

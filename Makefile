@@ -38,6 +38,7 @@ check-lifecycle:
 	@test -z "$$(find cmd -maxdepth 1 -type f ! -perm -u=x -print)"
 	@test -z "$$(grep -rIl "$$(printf '\r')" cmd || true)"
 	@for script in cmd/main cmd/*_init cmd/*_callback; do test "$$(head -n 1 "$$script")" = '#!/bin/sh'; sh -n "$$script"; done
+	@grep -q 'stop_and_confirm "NetBird daemon"' cmd/uninstall_init
 	@env -i PATH=/usr/bin:/bin ./cmd/install_init
 	@env -i PATH=/usr/bin:/bin ./cmd/install_callback
 

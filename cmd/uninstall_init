@@ -1,3 +1,36 @@
 #!/bin/sh
-# fnOS owns package data removal. This app never deletes official NetBird identity data.
-exit 0
+set -u
+
+# Stop both package processes before fnOS removes TRIM_PKGVAR. NetBird state is
+# package data and is deliberately removed only after this hook succeeds.
+pid_file="${TRIM_PKGVAR:?}/netbird-fnos-api.pid"
+socket_path="${TRIM_APPDEST:?}/app.sock"
+daemon_dir="${TRIM_PKGVAR}/netbird"
+daemon_pid_file="${daemon_dir}/daemon.pid"
+daemon_socket="${daemon_dir}/daemon.sock"
+
+write_error() { printf '%s\n' "$1" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"; }
+running() {
+  [ -f "$1" ] || return 1
+  pid="$(cat "$1")"
+  kill -0 "$pid" 2>/dev/null
+}
+stop_and_confirm() {
+  label="$1"
+  file="$2"
+  if running "$file"; then
+    pid="$(cat "$file")"
+    kill "$pid" 2>/dev/null || true
+    attempts=0
+    while running "$file" && [ "$attempts" -lt 10 ]; do sleep 1; attempts=$((attempts + 1)); done
+    if running "$file"; then
+      write_error "$label did not stop; package data was not removed."
+      return 1
+    fi
+  fi
+}
+
+stop_and_confirm "NetBird API service" "$pid_file" || exit 1
+rm -f "$pid_file" "$socket_path"
+stop_and_confirm "NetBird daemon" "$daemon_pid_file" || exit 1
+rm -f "$daemon_pid_file" "$daemon_socket"
