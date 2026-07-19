@@ -25,7 +25,7 @@ start_daemon() {
   if daemon_running; then return 0; fi
   mkdir -p "$daemon_dir"
   rm -f "$daemon_pid_file" "$daemon_socket"
-  nohup "${TRIM_APPDEST}/bin/netbird" --daemon-addr "unix://${daemon_socket}" --config "$daemon_config" --log-file "$daemon_log" service run >>"$daemon_log" 2>&1 &
+  nohup "${TRIM_APPDEST}/bin/netbird" --daemon-addr "unix://${daemon_socket}" --config "$daemon_config" --log-file "$daemon_log" service run >/dev/null 2>&1 &
   echo "$!" > "$daemon_pid_file"
   sleep 1
   daemon_running
