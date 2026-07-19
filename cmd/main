@@ -1,8 +1,11 @@
 #!/bin/sh
 set -eu
 
+api_user="netbird-fnos"
+api_group="netbird-fnos"
 pid_file="${TRIM_PKGVAR:?}/netbird-fnos-api.pid"
-socket_path="${TRIM_APPDEST:?}/app.sock"
+api_socket_dir="${TRIM_APPDEST:?}/run"
+socket_path="${api_socket_dir}/app.sock"
 log_file="${TRIM_PKGVAR}/netbird-fnos-api.log"
 daemon_dir="${TRIM_PKGVAR}/netbird"
 daemon_pid_file="${daemon_dir}/daemon.pid"
@@ -11,6 +14,17 @@ daemon_log="${daemon_dir}/daemon.log"
 daemon_config="${daemon_dir}/config.json"
 
 write_error() { printf '%s\n' "$1" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"; }
+require_api_user() {
+  if ! id "$api_user" >/dev/null 2>&1; then
+    write_error "Required fnOS package user ${api_user} is unavailable."
+    return 1
+  fi
+}
+prepare_api_runtime() {
+  mkdir -p "$api_socket_dir" "${daemon_dir}/profiles"
+  chown "$api_user:$api_group" "$api_socket_dir" "${daemon_dir}/profiles"
+  chmod 0750 "$api_socket_dir" "${daemon_dir}/profiles"
+}
 is_running() {
   [ -f "$pid_file" ] || return 1
   pid="$(cat "$pid_file")"
@@ -27,8 +41,13 @@ start_daemon() {
   rm -f "$daemon_pid_file" "$daemon_socket"
   NB_STATE_DIR="$daemon_dir" nohup "${TRIM_APPDEST}/bin/netbird" --daemon-addr "unix://${daemon_socket}" --config "$daemon_config" --log-file "$daemon_log" service run >/dev/null 2>&1 &
   echo "$!" > "$daemon_pid_file"
-  sleep 1
-  daemon_running
+  attempts=0
+  while [ ! -S "$daemon_socket" ] && daemon_running && [ "$attempts" -lt 10 ]; do sleep 1; attempts=$((attempts + 1)); done
+  if ! daemon_running || [ ! -S "$daemon_socket" ]; then return 1; fi
+  # The root daemon exposes a local control socket only to the unprivileged
+  # wrapper API user. No browser-controlled process gets direct root access.
+  chown "$api_user:$api_group" "$daemon_socket"
+  chmod 0600 "$daemon_socket"
 }
 stop_daemon() {
   if daemon_running; then
@@ -47,9 +66,19 @@ case "${1:-}" in
   start)
     if is_running; then exit 0; fi
     rm -f "$pid_file" "$socket_path"
+    require_api_user || exit 1
+    prepare_api_runtime
     if ! start_daemon; then write_error "NetBird daemon failed to start; inspect $daemon_log."; exit 1; fi
-    export NB_FNOS_SOCKET="$socket_path" NB_FNOS_DAEMON_ADDR="unix://${daemon_socket}" NB_STATE_DIR="$daemon_dir" NB_FNOS_GATEWAY_PREFIX="/app/netbird-fnos" NB_FNOS_WEB_ROOT="${TRIM_APPDEST}/www"
-    nohup "${TRIM_APPDEST}/bin/netbird-fnos-api" >>"$log_file" 2>&1 &
+    # Run the HTTP API as the package user. The command is fixed; no request
+    # value is interpolated into this privilege transition.
+    # shellcheck disable=SC2016 # $@ is expanded by the fixed child shell.
+    nohup su -s /bin/sh "$api_user" -c 'exec "$@"' sh env \
+      NB_FNOS_SOCKET="$socket_path" \
+      NB_FNOS_DAEMON_ADDR="unix://${daemon_socket}" \
+      NB_STATE_DIR="$daemon_dir" \
+      NB_FNOS_GATEWAY_PREFIX="/app/netbird-fnos" \
+      NB_FNOS_WEB_ROOT="${TRIM_APPDEST}/www" \
+      "${TRIM_APPDEST}/bin/netbird-fnos-api" >>"$log_file" 2>&1 &
     echo "$!" > "$pid_file"
     sleep 1
     if ! is_running; then write_error "NetBird service failed to start; inspect $log_file."; exit 1; fi

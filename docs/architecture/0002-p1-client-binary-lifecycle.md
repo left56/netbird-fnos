@@ -48,8 +48,9 @@ bounded `netbird version` and `netbird status --check startup` probes. Failed
 checks restore `previous`; if that version also fails, `current` is removed and
 resolution falls back to the bundled CLI. Current versions cannot be deleted.
 
-The wrapper does not install, elevate, or restart the daemon: fnOS lifecycle
-and the official daemon own that privilege boundary.
+The wrapper starts the official daemon through its fnOS lifecycle entry. It
+does not expose daemon start, command execution, or executable-path selection
+to HTTP callers.
 
 ## Delivery plan
 
@@ -62,12 +63,18 @@ and the official daemon own that privilege boundary.
 
 ## Permissions assessment
 
-The Web API remains the fnOS package user. This P1 code only manages the
-official executable and executes safe fixed subcommands (`version` and status)
-with argument arrays; it does not grant root, use `sh -c`, or accept commands
-from the browser. The NetBird daemon's need for interface, routing and
-firewall privileges is platform-dependent. Before claiming supported operation
-on fnOS, validate the official CLI/daemon with the package user's effective
-capabilities (in particular `NET_ADMIN` and `NET_RAW`) on hardware, then use
-fnOS's narrowly scoped package capability/privileged-entry mechanism if
-required. Do not elevate the HTTP API as a workaround.
+NetBird must create a WireGuard interface, routes, firewall state, and raw
+sockets. Its daemon therefore runs as root in the locally installed FPK. The
+fnOS privilege model currently documents only package-wide `package` and
+`root` identities, not a per-executable capability grant. The lifecycle script
+starts only the bundled, fixed-path daemon as root; it then uses the declared
+`netbird-fnos` package user to run the HTTP API. The daemon Unix socket is
+owned by that package user and mode `0600`.
+
+The API accepts no executable path or shell fragment, all NetBird calls use
+argument arrays and timeouts, and the daemon is reachable only through its
+private Unix socket. This is a local-install requirement: third-party root FPKs
+may not be accepted by the fnOS app store. Hardware validation must confirm
+that `wt0` can be created, required routes are installed, API process UID is
+`netbird-fnos`, daemon UID is root, and the daemon socket is inaccessible to
+other users.

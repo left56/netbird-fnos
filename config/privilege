@@ -1,1 +1,7 @@
-{"defaults":{"run-as":"package"}}
+{
+  "defaults": {
+    "run-as": "root"
+  },
+  "username": "netbird-fnos",
+  "groupname": "netbird-fnos"
+}
