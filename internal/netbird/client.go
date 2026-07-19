@@ -55,11 +55,11 @@ type Network struct {
 type ConnectOptions struct {
 	ManagementURL       string `json:"managementURL"`
 	SetupKey            string `json:"setupKey"`
-	AllowServerSSH      bool `json:"allowServerSSH"`
-	BlockInbound        bool `json:"blockInbound"`
-	BlockLANAccess      bool `json:"blockLANAccess"`
-	DisableAutoConnect  bool `json:"disableAutoConnect"`
-	DisableClientRoutes bool `json:"disableClientRoutes"`
+	AllowServerSSH      bool   `json:"allowServerSSH"`
+	BlockInbound        bool   `json:"blockInbound"`
+	BlockLANAccess      bool   `json:"blockLANAccess"`
+	DisableAutoConnect  bool   `json:"disableAutoConnect"`
+	DisableClientRoutes bool   `json:"disableClientRoutes"`
 }
 
 func NewClient(runner Runner, binary string, timeout time.Duration) Client {
@@ -242,7 +242,7 @@ func (c Client) run(ctx context.Context, args ...string) ([]byte, error) {
 	}
 	return c.runner.Run(ctx, binary, args...)
 }
-func safeValue(v string) bool { return v != "" && len(v) <= 256 && !strings.ContainsAny(v, "\x00\r\n") }
+func safeValue(v string) bool  { return v != "" && len(v) <= 256 && !strings.ContainsAny(v, "\x00\r\n") }
 func safeSecret(v string) bool { return len(v) <= 4096 && !strings.ContainsAny(v, "\x00\r\n") }
 func parseProfiles(out string) []Profile {
 	var result []Profile
