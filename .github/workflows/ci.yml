@@ -70,9 +70,9 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           sed -i "s/^platform=.*/platform=${{ matrix.manifest_platform }}/" manifest
-          make VERSION=0.2.0 fpk
-          mv netbird-fnos.fpk netbird-fnos-0.2.0-${{ matrix.target_arch }}.fpk
+          make VERSION=0.3.0 fpk
+          mv netbird-fnos.fpk netbird-fnos-0.3.0-${{ matrix.target_arch }}.fpk
       - uses: actions/upload-artifact@v5
         with:
           name: netbird-fnos-fpk-${{ matrix.target_arch }}
-          path: netbird-fnos-0.2.0-${{ matrix.target_arch }}.fpk
+          path: netbird-fnos-0.3.0-${{ matrix.target_arch }}.fpk

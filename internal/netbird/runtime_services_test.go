@@ -21,7 +21,7 @@ func (runtimeFake) SelectNetworks(context.Context, []string, bool) error { retur
 func (runtimeFake) DeselectNetworks(context.Context, []string) error     { return nil }
 
 func TestRuntimeServicesReturnStructuredViews(t *testing.T) {
-	status, err := NewStatusService(runtimeFake{}, nil, "0.2.0").Get(context.Background())
+	status, err := NewStatusService(runtimeFake{}, nil, "0.3.0").Get(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

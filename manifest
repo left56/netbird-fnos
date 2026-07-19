@@ -1,5 +1,5 @@
 appname=netbird-fnos
-version=0.2.0
+version=0.3.0
 display_name=NetBird
 desc=fnOS 的本地 NetBird 状态查看器。
 source=thirdparty
@@ -13,4 +13,4 @@ desktop_uidir=ui
 desktop_applaunchname=netbird-fnos.main
 disable_authorization_path=true
 checkport=false
-changelog=0.2.0：内置官方 NetBird CLI，并增加客户端二进制管理基础。
+changelog=0.3.0：增加运行状态、Peers、Networks、Exit Node 与 Profile 管理界面。
