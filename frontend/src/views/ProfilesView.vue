@@ -30,7 +30,14 @@ async function load() {
 }
 async function create() {
   try {
-    await api("/api/profiles", json(draft.value));
+    await api("/api/profiles", json({
+      name: draft.value.name,
+      config: { managementURL: draft.value.managementURL },
+      setupKey: draft.value.setupKey,
+      presharedKey: draft.value.presharedKey,
+      selectAfterCreate: draft.value.selectAfterCreate,
+      connectAfterCreate: draft.value.connectAfterCreate,
+    }));
     createOpen.value = false;
     await load();
   } catch {

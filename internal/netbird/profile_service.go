@@ -22,12 +22,15 @@ type ProfileDetail struct {
 	RestartRequiredFields []string        `json:"restartRequiredFields"`
 }
 type ProfileCreate struct {
-	Name               string          `json:"name"`
-	Config             ProfileSettings `json:"config"`
-	SetupKey           string          `json:"setupKey"`
-	PresharedKey       string          `json:"presharedKey"`
-	SelectAfterCreate  bool            `json:"selectAfterCreate"`
-	ConnectAfterCreate bool            `json:"connectAfterCreate"`
+	Name   string          `json:"name"`
+	Config ProfileSettings `json:"config"`
+	// ManagementURL is accepted for compatibility with the original create
+	// form. New callers should use config.managementURL.
+	ManagementURL      string `json:"managementURL,omitempty"`
+	SetupKey           string `json:"setupKey"`
+	PresharedKey       string `json:"presharedKey"`
+	SelectAfterCreate  bool   `json:"selectAfterCreate"`
+	ConnectAfterCreate bool   `json:"connectAfterCreate"`
 }
 type ProfileUpdate struct {
 	Config ProfileSettings `json:"config"`
@@ -52,7 +55,10 @@ func NewProfileService(cli ProfileCLI, store *ProfileConfigStore) *ProfileServic
 func (s *ProfileService) List(ctx context.Context) ([]ProfileDetail, error) {
 	ps, e := s.cli.Profiles(ctx)
 	if e != nil {
-		return nil, e
+		return []ProfileDetail{s.defaultFallback()}, nil
+	}
+	if len(ps) == 0 {
+		return []ProfileDetail{s.defaultFallback()}, nil
 	}
 	out := make([]ProfileDetail, 0, len(ps))
 	for _, p := range ps {
@@ -67,6 +73,9 @@ func (s *ProfileService) List(ctx context.Context) ([]ProfileDetail, error) {
 func (s *ProfileService) Get(ctx context.Context, id string) (ProfileDetail, error) {
 	ps, e := s.cli.Profiles(ctx)
 	if e != nil {
+		if id == "default" {
+			return s.defaultFallback(), nil
+		}
 		return ProfileDetail{}, e
 	}
 	for _, p := range ps {
@@ -74,7 +83,21 @@ func (s *ProfileService) Get(ctx context.Context, id string) (ProfileDetail, err
 			return s.detail(p)
 		}
 	}
+	if id == "default" {
+		return s.defaultFallback(), nil
+	}
 	return ProfileDetail{}, os.ErrNotExist
+}
+func (s *ProfileService) defaultFallback() ProfileDetail {
+	c, e := s.store.Get("default")
+	if e != nil {
+		c = ProfileSettings{Name: "default"}
+	}
+	if c.Name == "" {
+		c.Name = "default"
+	}
+	p := Profile{ID: "default", Name: c.Name, Default: true, Active: true}
+	return ProfileDetail{Metadata: p, Config: c, Runtime: ProfileRuntime{Active: true}, Source: "config-fallback", Capabilities: Capabilities{Profiles: true}}
 }
 func (s *ProfileService) detail(p Profile) (ProfileDetail, error) {
 	c, e := s.store.Get(p.ID)
@@ -95,6 +118,12 @@ func (s *ProfileService) detail(p Profile) (ProfileDetail, error) {
 func (s *ProfileService) Create(ctx context.Context, in ProfileCreate) (ProfileDetail, error) {
 	if !safeValue(in.Name) {
 		return ProfileDetail{}, errors.New("invalid profile name")
+	}
+	if strings.EqualFold(in.Name, "default") {
+		return ProfileDetail{}, errors.New("default profile already exists")
+	}
+	if in.Config.ManagementURL == "" {
+		in.Config.ManagementURL = in.ManagementURL
 	}
 	all, e := s.cli.Profiles(ctx)
 	if e != nil {
