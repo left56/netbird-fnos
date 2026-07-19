@@ -115,6 +115,14 @@ func (c Client) Disconnect(ctx context.Context) error { _, err := c.run(ctx, "do
 func (c Client) Profiles(ctx context.Context) ([]Profile, error) {
 	out, err := c.run(ctx, "profile", "list", "--show-id")
 	if err != nil {
+		// A daemon can temporarily reject profile RPCs while it is starting.
+		// Preserve the normal default profile view whenever the controlled CLI
+		// still reports a usable client instead of turning the page into an
+		// unsupported-feature error.
+		status := c.Status(ctx)
+		if status.State != "unavailable" {
+			return []Profile{{ID: "default", Name: "default", Default: true, Active: true, Connected: status.Connected}}, nil
+		}
 		return nil, err
 	}
 	profiles := parseProfiles(string(out))
@@ -128,7 +136,7 @@ func (c Client) Profiles(ctx context.Context) ([]Profile, error) {
 		}
 	}
 	for i := range profiles {
-		profiles[i].Default = profiles[i].ID == "default"
+		profiles[i].Default = profiles[i].ID == "default" || strings.EqualFold(profiles[i].Name, "default")
 		profiles[i].Connected = profiles[i].Active && c.Status(ctx).Connected
 	}
 	return profiles, nil
@@ -226,6 +234,7 @@ func parseProfiles(out string) []Profile {
 			p.Name = fields[1]
 		}
 		p.Active = strings.Contains(line, "✓") || strings.Contains(strings.ToLower(line), "active")
+		p.Default = p.Default || strings.EqualFold(p.Name, "default")
 		result = append(result, p)
 	}
 	return result

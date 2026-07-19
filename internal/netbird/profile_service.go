@@ -78,11 +78,19 @@ func (s *ProfileService) Get(ctx context.Context, id string) (ProfileDetail, err
 }
 func (s *ProfileService) detail(p Profile) (ProfileDetail, error) {
 	c, e := s.store.Get(p.ID)
-	if e != nil {
+	source := "cli"
+	if errors.Is(e, os.ErrNotExist) {
+		// NetBird owns its profile files. The wrapper only persists the
+		// whitelist UI settings it manages, so a CLI-discovered profile is
+		// valid before it has ever been edited in this UI.
+		c = ProfileSettings{Name: p.Name}
+		source = "config-fallback"
+	} else if e != nil {
 		return ProfileDetail{}, e
 	}
 	p.Name = first(c.Name, p.Name)
-	return ProfileDetail{Metadata: p, Config: c, Runtime: ProfileRuntime{Active: p.Active, Connected: p.Connected}, Source: "cli", Capabilities: Capabilities{Profiles: true}}, nil
+	p.Default = p.Default || strings.EqualFold(p.Name, "default")
+	return ProfileDetail{Metadata: p, Config: c, Runtime: ProfileRuntime{Active: p.Active, Connected: p.Connected}, Source: source, Capabilities: Capabilities{Profiles: true}}, nil
 }
 func (s *ProfileService) Create(ctx context.Context, in ProfileCreate) (ProfileDetail, error) {
 	if !safeValue(in.Name) {
@@ -204,7 +212,7 @@ func (s *ProfileService) Delete(ctx context.Context, id string) error {
 	if e != nil {
 		return e
 	}
-	if id == "default" || d.Runtime.Active || d.Runtime.Connected {
+	if d.Metadata.Default || d.Runtime.Active || d.Runtime.Connected {
 		return errors.New("profile cannot be deleted")
 	}
 	return s.cli.RemoveProfile(ctx, id)

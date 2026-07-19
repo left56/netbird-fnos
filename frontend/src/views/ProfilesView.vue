@@ -43,7 +43,7 @@ async function select(p: any) {
   await load();
 }
 async function remove(p: any) {
-  if (p.id === "default" || p.active) {
+  if (p.default || p.active) {
     error.value = "default 或当前 Profile 不能删除。";
     return;
   }
@@ -79,7 +79,7 @@ onMounted(load);
         </div>
         <div>
           <FnTag v-if="p.active" type="success">当前活动</FnTag
-          ><FnTag v-if="p.id === 'default'" type="primary">默认</FnTag>
+          ><FnTag v-if="p.default" type="primary">默认</FnTag>
         </div>
       </div>
       <dl>
@@ -97,7 +97,7 @@ onMounted(load);
       <div class="actions">
         <FnButton @click="select(p)">切换</FnButton><FnButton>编辑配置</FnButton
         ><FnButton
-          :disabled="p.id === 'default' || p.active"
+          :disabled="p.default || p.active"
           variant="danger"
           @click="remove(p)"
           >删除</FnButton
