@@ -51,3 +51,12 @@ func TestParseProfilesRecognizesDefaultByName(t *testing.T) {
 		t.Fatalf("default profile was not recognized: %#v", profiles)
 	}
 }
+
+func TestRuntimeCommandsUseConfiguredDaemonSocket(t *testing.T) {
+	runner := &fakeRunner{output: []byte(`{"status":"Connected","connected":true}`)}
+	client := Client{runner: runner, binary: func(context.Context) string { return "/opt/netbird" }, timeout: time.Second, daemonAddr: "unix:///pkg/netbird/daemon.sock"}
+	_ = client.Status(context.Background())
+	if len(runner.args) != 4 || runner.args[0] != "--daemon-addr" || runner.args[1] != "unix:///pkg/netbird/daemon.sock" || runner.args[2] != "status" {
+		t.Fatalf("daemon address was not used: %#v", runner.args)
+	}
+}

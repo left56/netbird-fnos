@@ -33,12 +33,12 @@ func main() {
 
 	manager := netbird.NewBinaryManager(cfg.PackageVar, cfg.AppDest, netbird.ExecRunner{}, cfg.CommandTimeout)
 	lifecycle := netbird.NewLifecycle(manager, cfg.PackageVar)
-	client := netbird.NewManagedClient(netbird.ExecRunner{}, manager, cfg.CommandTimeout)
+	client := netbird.NewManagedClientWithDaemon(netbird.ExecRunner{}, manager, cfg.CommandTimeout, cfg.DaemonAddr)
 	profiles := netbird.NewProfileService(client, netbird.NewProfileConfigStore(cfg.PackageVar))
 	status := netbird.NewStatusService(client, manager, version)
 	peers := netbird.NewPeerService(client)
 	networks := netbird.NewNetworkService(client)
-	logs := api.NewLogReader(filepath.Join(cfg.PackageVar, "netbird-fnos-api.log"))
+	logs := api.NewLogReader(filepath.Join(cfg.PackageVar, "netbird-fnos-api.log"), filepath.Join(cfg.PackageVar, "netbird", "daemon.log"))
 	handler := api.NewHandler(logger, client, manager, lifecycle, profiles, status, peers, networks, logs, api.BuildInfo{Version: version, Commit: commit, BuildTime: buildTime})
 	if cfg.WebRoot != "" {
 		handler = api.WithStaticFiles(handler, cfg.GatewayPrefix, cfg.WebRoot)

@@ -604,16 +604,27 @@ func (unavailableLogs) Latest() ([]string, error)                    { return []
 
 // NewLogReader provides a bounded, redacted view of the wrapper log. The
 // netbird CLI is never asked for logs and secrets are removed defensively.
-func NewLogReader(filename string) logReader { return fileLogReader{filename: filename} }
+func NewLogReader(filenames ...string) logReader { return fileLogReader{filenames: filenames} }
 
-type fileLogReader struct{ filename string }
+type fileLogReader struct{ filenames []string }
 
 func (r fileLogReader) Latest() ([]string, error) {
-	data, err := os.ReadFile(r.filename)
-	if err != nil {
-		return nil, err
+	all := []string{}
+	read := false
+	for _, filename := range r.filenames {
+		data, err := os.ReadFile(filename)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		read = true
+		all = append(all, strings.Split(string(data), "\n")...)
 	}
-	all := strings.Split(string(data), "\n")
+	if !read {
+		return nil, os.ErrNotExist
+	}
 	if len(all) > 100 {
 		all = all[len(all)-100:]
 	}

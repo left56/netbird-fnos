@@ -23,9 +23,10 @@ func (ExecRunner) Run(ctx context.Context, binary string, args ...string) ([]byt
 }
 
 type Client struct {
-	runner  Runner
-	binary  func(context.Context) string
-	timeout time.Duration
+	runner     Runner
+	binary     func(context.Context) string
+	timeout    time.Duration
+	daemonAddr string
 }
 type Status struct {
 	State     string `json:"state"`
@@ -67,14 +68,17 @@ func NewManagedClient(runner Runner, manager *BinaryManager, timeout time.Durati
 	return Client{runner: runner, binary: manager.Path, timeout: timeout}
 }
 
+// NewManagedClientWithDaemon binds runtime commands to the package-owned
+// daemon socket. The socket address is supplied by package lifecycle code,
+// never by a browser request.
+func NewManagedClientWithDaemon(runner Runner, manager *BinaryManager, timeout time.Duration, daemonAddr string) Client {
+	return Client{runner: runner, binary: manager.Path, timeout: timeout, daemonAddr: daemonAddr}
+}
+
 func (c Client) Status(ctx context.Context) Status {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
-	binary := c.binary(ctx)
-	if binary == "" {
-		return Status{State: "unavailable", Detail: "official NetBird CLI is not installed"}
-	}
-	output, err := c.runner.Run(ctx, binary, "status", "--json")
+	output, err := c.run(ctx, "status", "--json")
 	if err != nil {
 		return unavailable(err)
 	}
@@ -218,6 +222,9 @@ func (c Client) run(ctx context.Context, args ...string) ([]byte, error) {
 	binary := c.binary(ctx)
 	if binary == "" {
 		return nil, exec.ErrNotFound
+	}
+	if c.daemonAddr != "" {
+		args = append([]string{"--daemon-addr", c.daemonAddr}, args...)
 	}
 	return c.runner.Run(ctx, binary, args...)
 }

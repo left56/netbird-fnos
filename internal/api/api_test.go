@@ -83,6 +83,17 @@ func TestLogReaderRedactsSensitiveLines(t *testing.T) {
 	}
 }
 
+func TestLogReaderIncludesDaemonLog(t *testing.T) {
+	dir := t.TempDir()
+	apiLog, daemonLog := filepath.Join(dir, "api.log"), filepath.Join(dir, "daemon.log")
+	mustWrite(t, apiLog, "api started\n")
+	mustWrite(t, daemonLog, "daemon started\n")
+	lines, err := NewLogReader(apiLog, daemonLog).Latest()
+	if err != nil || !strings.Contains(strings.Join(lines, "\n"), "daemon started") {
+		t.Fatalf("unexpected daemon log result: %#v, %v", lines, err)
+	}
+}
+
 func TestStaticFilesThroughGateway(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "index.html"), "<!doctype html><div id=app></div>")
