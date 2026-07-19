@@ -1,6 +1,6 @@
 SHELL := /usr/bin/env bash
 VERSION ?= dev
-NETBIRD_VERSION ?= 0.71.4
+NETBIRD_VERSION ?= 0.74.7
 TARGET_ARCH ?= x86_64
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
