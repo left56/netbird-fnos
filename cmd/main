@@ -25,7 +25,7 @@ start_daemon() {
   if daemon_running; then return 0; fi
   mkdir -p "$daemon_dir"
   rm -f "$daemon_pid_file" "$daemon_socket"
-  nohup "${TRIM_APPDEST}/bin/netbird" --daemon-addr "unix://${daemon_socket}" --config "$daemon_config" --log-file "$daemon_log" service run >/dev/null 2>&1 &
+  NB_STATE_DIR="$daemon_dir" nohup "${TRIM_APPDEST}/bin/netbird" --daemon-addr "unix://${daemon_socket}" --config "$daemon_config" --log-file "$daemon_log" service run >/dev/null 2>&1 &
   echo "$!" > "$daemon_pid_file"
   sleep 1
   daemon_running
@@ -42,7 +42,7 @@ case "${1:-}" in
     if is_running; then exit 0; fi
     rm -f "$pid_file" "$socket_path"
     if ! start_daemon; then write_error "NetBird daemon failed to start; inspect $daemon_log."; exit 1; fi
-    export NB_FNOS_SOCKET="$socket_path" NB_FNOS_DAEMON_ADDR="unix://${daemon_socket}" NB_FNOS_GATEWAY_PREFIX="/app/netbird-fnos" NB_FNOS_WEB_ROOT="${TRIM_APPDEST}/www"
+    export NB_FNOS_SOCKET="$socket_path" NB_FNOS_DAEMON_ADDR="unix://${daemon_socket}" NB_STATE_DIR="$daemon_dir" NB_FNOS_GATEWAY_PREFIX="/app/netbird-fnos" NB_FNOS_WEB_ROOT="${TRIM_APPDEST}/www"
     nohup "${TRIM_APPDEST}/bin/netbird-fnos-api" >>"$log_file" 2>&1 &
     echo "$!" > "$pid_file"
     sleep 1
