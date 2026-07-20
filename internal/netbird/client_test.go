@@ -44,3 +44,37 @@ func TestStatusDoesNotExposeCommandError(t *testing.T) {
 		t.Fatalf("unexpected detail: %q", status.Detail)
 	}
 }
+
+func TestParseProfilesRecognizesDefaultByName(t *testing.T) {
+	profiles := parseProfiles("ID  NAME  ACTIVE\n8fc1e234  default  ✓\n")
+	if len(profiles) != 1 || !profiles[0].Default || !profiles[0].Active {
+		t.Fatalf("default profile was not recognized: %#v", profiles)
+	}
+}
+
+func TestRuntimeCommandsUseConfiguredDaemonSocket(t *testing.T) {
+	runner := &fakeRunner{output: []byte(`{"status":"Connected","connected":true}`)}
+	client := Client{runner: runner, binary: func(context.Context) string { return "/opt/netbird" }, timeout: time.Second, daemonAddr: "unix:///pkg/netbird/daemon.sock"}
+	_ = client.Status(context.Background())
+	if len(runner.args) != 4 || runner.args[0] != "--daemon-addr" || runner.args[1] != "unix:///pkg/netbird/daemon.sock" || runner.args[2] != "status" {
+		t.Fatalf("daemon address was not used: %#v", runner.args)
+	}
+}
+
+func TestConnectPassesSetupKeyOnlyToOfficialCLI(t *testing.T) {
+	runner := &fakeRunner{}
+	client := NewClient(runner, "/opt/netbird", time.Second)
+	err := client.Connect(context.Background(), ConnectOptions{ManagementURL: "https://netbird.example", SetupKey: "one-time-key"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"up", "--management-url", "https://netbird.example", "--setup-key", "one-time-key"}
+	if len(runner.args) != len(want) {
+		t.Fatalf("unexpected command: %#v", runner.args)
+	}
+	for i := range want {
+		if runner.args[i] != want[i] {
+			t.Fatalf("unexpected command: %#v", runner.args)
+		}
+	}
+}

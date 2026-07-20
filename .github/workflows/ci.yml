@@ -12,7 +12,7 @@ jobs:
   backend:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with: { go-version: '1.26.x' }
       - run: test -z "$(gofmt -l cmd internal)"
@@ -22,32 +22,57 @@ jobs:
   frontend:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: '22.x', cache: npm, cache-dependency-path: frontend/package-lock.json }
       - run: npm --prefix frontend ci
       - run: npm --prefix frontend run build
   fnos-package:
+    strategy:
+      matrix:
+        include:
+          - target_arch: x86_64
+            manifest_platform: x86
+            goarch: amd64
+          - target_arch: arm64
+            manifest_platform: arm
+            goarch: arm64
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with: { go-version: '1.26.x' }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with: { node-version: '22.x', cache: npm, cache-dependency-path: frontend/package-lock.json }
-      - name: Install ShellCheck
-        run: sudo apt-get update && sudo apt-get install --yes shellcheck
+      - name: Install packaging validators
+        run: sudo apt-get update && sudo apt-get install --yes shellcheck qemu-user-static
       - name: Validate fnOS metadata and lifecycle scripts
         run: |
           jq empty config/privilege config/resource app/ui/config
+          test -z "$(find cmd -maxdepth 1 -type f ! -perm -u=x -print)"
+          test -z "$(grep -rIl $'\r' cmd || true)"
+          for script in cmd/main cmd/*_init cmd/*_callback; do
+            test "$(head -n 1 "$script")" = '#!/bin/sh'
+            sh -n "$script"
+          done
+          env -i PATH=/usr/bin:/bin ./cmd/install_init
+          env -i PATH=/usr/bin:/bin ./cmd/install_callback
           shellcheck cmd/main cmd/*_init cmd/*_callback
-          bash -n cmd/main cmd/*_init cmd/*_callback
       - name: Install official fnpack 1.2.3
         run: |
           curl --fail --location --silent --show-error https://static2.fnnas.com/fnpack/fnpack-1.2.3-linux-amd64 --output /usr/local/bin/fnpack
           chmod +x /usr/local/bin/fnpack
           fnpack --help
       - name: Build FPK
-        run: make fpk
-      - uses: actions/upload-artifact@v4
-        with: { name: netbird-fnos-fpk, path: netbird-fnos.fpk }
+        env:
+          NETBIRD_VERSION: 0.74.7
+          TARGET_ARCH: ${{ matrix.target_arch }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          sed -i "s/^platform=.*/platform=${{ matrix.manifest_platform }}/" manifest
+          make VERSION=0.3.0 fpk
+          mv netbird-fnos.fpk netbird-fnos-0.3.0-${{ matrix.target_arch }}.fpk
+      - uses: actions/upload-artifact@v5
+        with:
+          name: netbird-fnos-fpk-${{ matrix.target_arch }}
+          path: netbird-fnos-0.3.0-${{ matrix.target_arch }}.fpk

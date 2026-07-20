@@ -1,11 +1,99 @@
-#!/usr/bin/env bash
-set -euo pipefail
-pid_file="${TRIM_PKGVAR}/netbird-fnos-api.pid"; socket_path="${TRIM_APPDEST}/app.sock"; log_file="${TRIM_PKGVAR}/netbird-fnos-api.log"
+#!/bin/sh
+set -eu
+
+api_user="netbird-fnos"
+api_group="netbird-fnos"
+pid_file="${TRIM_PKGVAR:?}/netbird-fnos-api.pid"
+api_socket_dir="${TRIM_APPDEST:?}/run"
+socket_path="${api_socket_dir}/app.sock"
+log_file="${TRIM_PKGVAR}/netbird-fnos-api.log"
+daemon_dir="${TRIM_PKGVAR}/netbird"
+daemon_pid_file="${daemon_dir}/daemon.pid"
+daemon_socket="${daemon_dir}/daemon.sock"
+daemon_log="${daemon_dir}/daemon.log"
+daemon_config="${daemon_dir}/config.json"
+
 write_error() { printf '%s\n' "$1" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"; }
-is_running() { [[ -f "$pid_file" ]] || return 1; local pid; pid="$(cat "$pid_file")"; kill -0 "$pid" 2>/dev/null; }
+require_api_user() {
+  if ! id "$api_user" >/dev/null 2>&1; then
+    write_error "Required fnOS package user ${api_user} is unavailable."
+    return 1
+  fi
+}
+prepare_api_runtime() {
+  mkdir -p "$api_socket_dir" "${daemon_dir}/profiles"
+  chown "$api_user:$api_group" "$api_socket_dir" "${daemon_dir}/profiles"
+  chmod 0750 "$api_socket_dir" "${daemon_dir}/profiles"
+}
+is_running() {
+  [ -f "$pid_file" ] || return 1
+  pid="$(cat "$pid_file")"
+  kill -0 "$pid" 2>/dev/null
+}
+daemon_running() {
+  [ -f "$daemon_pid_file" ] || return 1
+  daemon_pid="$(cat "$daemon_pid_file")"
+  kill -0 "$daemon_pid" 2>/dev/null
+}
+start_daemon() {
+  if daemon_running; then return 0; fi
+  mkdir -p "$daemon_dir"
+  rm -f "$daemon_pid_file" "$daemon_socket"
+  NB_STATE_DIR="$daemon_dir" nohup "${TRIM_APPDEST}/bin/netbird" --daemon-addr "unix://${daemon_socket}" --config "$daemon_config" --log-file "$daemon_log" service run >/dev/null 2>&1 &
+  echo "$!" > "$daemon_pid_file"
+  attempts=0
+  while [ ! -S "$daemon_socket" ] && daemon_running && [ "$attempts" -lt 10 ]; do sleep 1; attempts=$((attempts + 1)); done
+  if ! daemon_running || [ ! -S "$daemon_socket" ]; then return 1; fi
+  # The root daemon exposes a local control socket only to the unprivileged
+  # wrapper API user. No browser-controlled process gets direct root access.
+  chown "$api_user:$api_group" "$daemon_socket"
+  chmod 0600 "$daemon_socket"
+}
+stop_daemon() {
+  if daemon_running; then
+    daemon_pid="$(cat "$daemon_pid_file")"
+    kill "$daemon_pid" 2>/dev/null || true
+    attempts=0
+    while daemon_running && [ "$attempts" -lt 10 ]; do sleep 1; attempts=$((attempts + 1)); done
+    if daemon_running; then
+      write_error "NetBird daemon did not stop."
+      return 1
+    fi
+  fi
+  rm -f "$daemon_pid_file" "$daemon_socket"
+}
 case "${1:-}" in
-  start) if is_running; then exit 0; fi; rm -f -- "$pid_file" "$socket_path"; export NB_FNOS_SOCKET="$socket_path" NB_FNOS_GATEWAY_PREFIX="/app/netbird-fnos" NB_FNOS_WEB_ROOT="${TRIM_APPDEST}/www"; nohup "${TRIM_APPDEST}/bin/netbird-fnos-api" >>"$log_file" 2>&1 & echo "$!" > "$pid_file"; sleep 1; if ! is_running; then write_error "NetBird service failed to start; inspect $log_file."; exit 1; fi ;;
-  stop) if ! is_running; then rm -f -- "$pid_file" "$socket_path"; exit 0; fi; pid="$(cat "$pid_file")"; kill "$pid"; for _ in {1..10}; do is_running || break; sleep 1; done; if is_running; then write_error "NetBird service did not stop."; exit 1; fi; rm -f -- "$pid_file" "$socket_path" ;;
-  status) is_running && exit 0; exit 3 ;;
+  start)
+    if is_running; then exit 0; fi
+    rm -f "$pid_file" "$socket_path"
+    require_api_user || exit 1
+    prepare_api_runtime
+    if ! start_daemon; then write_error "NetBird daemon failed to start; inspect $daemon_log."; exit 1; fi
+    # Run the HTTP API as the package user. The command is fixed; no request
+    # value is interpolated into this privilege transition.
+    # shellcheck disable=SC2016 # $@ is expanded by the fixed child shell.
+    nohup su -s /bin/sh "$api_user" -c 'exec "$@"' sh env \
+      NB_FNOS_SOCKET="$socket_path" \
+      NB_FNOS_DAEMON_ADDR="unix://${daemon_socket}" \
+      NB_STATE_DIR="$daemon_dir" \
+      NB_FNOS_GATEWAY_PREFIX="/app/netbird-fnos" \
+      NB_FNOS_WEB_ROOT="${TRIM_APPDEST}/www" \
+      "${TRIM_APPDEST}/bin/netbird-fnos-api" >>"$log_file" 2>&1 &
+    echo "$!" > "$pid_file"
+    sleep 1
+    if ! is_running; then write_error "NetBird service failed to start; inspect $log_file."; exit 1; fi
+    ;;
+  stop)
+    if is_running; then
+      pid="$(cat "$pid_file")"
+      kill "$pid"
+      attempts=0
+      while is_running && [ "$attempts" -lt 10 ]; do sleep 1; attempts=$((attempts + 1)); done
+      if is_running; then write_error "NetBird service did not stop."; exit 1; fi
+    fi
+    rm -f "$pid_file" "$socket_path"
+    stop_daemon || exit 1
+    ;;
+  status) if is_running; then exit 0; fi; exit 3 ;;
   *) write_error "Unsupported lifecycle action: ${1:-empty}"; exit 1 ;;
 esac
