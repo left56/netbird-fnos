@@ -64,7 +64,7 @@ onMounted(load);
 <template>
   <FnPageHeader
     title="Networks"
-    description="先暂存选择，再统一应用到官方 NetBird CLI"
+    description="先暂存选择，再统一应用到 NetBird daemon"
   ><template #default><FnButton @click="selectShown(true)">全选当前</FnButton><FnButton @click="selectShown(false)">取消当前</FnButton></template></FnPageHeader><FnCard
     ><FnTabs v-model="tab"
       ><template #default="{ select, active }"

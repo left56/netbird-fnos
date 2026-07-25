@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineProps<{ items: { path: string; label: string }[] }>();
+defineProps<{ items: { path: string; label: string; icon?: string }[] }>();
 </script>
 <template>
   <aside>
@@ -7,9 +7,7 @@ defineProps<{ items: { path: string; label: string }[] }>();
       <span>◈</span><strong>NetBird</strong><small>fnOS</small>
     </div>
     <nav>
-      <RouterLink v-for="item in items" :key="item.path" :to="item.path">{{
-        item.label
-      }}</RouterLink>
+      <RouterLink v-for="item in items" :key="item.path" :to="item.path"><span>{{ item.icon }}</span>{{ item.label }}</RouterLink>
     </nav>
   </aside>
 </template>
@@ -39,16 +37,21 @@ nav {
   gap: 4px;
 }
 a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 11px 13px;
   border-radius: 10px;
   color: #556070;
   text-decoration: none;
   font-size: 14px;
 }
+a span { width: 18px; text-align: center; color: #7b8797; font-size: 17px; }
 a.router-link-exact-active {
   background: #fff;
   color: var(--fn-primary);
   font-weight: 600;
   box-shadow: 0 1px 4px #1018280d;
 }
+a.router-link-exact-active span { color: var(--fn-primary); }
 </style>

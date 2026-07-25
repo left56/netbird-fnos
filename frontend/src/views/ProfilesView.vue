@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { api, json } from "../api";
 import FnButton from "../components/FnButton.vue";
 import FnCard from "../components/FnCard.vue";
@@ -8,231 +8,43 @@ import FnFormItem from "../components/FnFormItem.vue";
 import FnInput from "../components/FnInput.vue";
 import FnPageHeader from "../components/FnPageHeader.vue";
 import FnSwitch from "../components/FnSwitch.vue";
+import FnTabs from "../components/FnTabs.vue";
 import FnTag from "../components/FnTag.vue";
-const profiles = ref<any[]>([]),
-  error = ref(""),
-  createOpen = ref(false),
-  editOpen = ref(false),
-  editingID = ref(""),
-  authMessage = ref(""),
-  draft = ref({
-    name: "",
-    managementURL: "",
-    setupKey: "",
-    presharedKey: "",
-    selectAfterCreate: true,
-    connectAfterCreate: false,
-  });
-const editDraft = ref<any>({});
-async function load() {
-  try {
-    profiles.value = (await api<any[]>("/api/profiles")).map((detail) => ({ ...detail.metadata, ...detail.runtime, config: detail.config, source: detail.source }));
-    error.value = "";
-  } catch (e) {
-    error.value = "当前版本不支持多 Profile，或官方客户端不可用。";
-  }
-}
-async function create() {
-  try {
-    await api("/api/profiles", json({
-      name: draft.value.name,
-      config: { managementURL: draft.value.managementURL },
-      setupKey: draft.value.setupKey,
-      presharedKey: draft.value.presharedKey,
-      selectAfterCreate: draft.value.selectAfterCreate,
-      connectAfterCreate: draft.value.setupKey !== "" || draft.value.connectAfterCreate,
-    }));
-    createOpen.value = false;
-    await load();
-  } catch {
-    error.value = "无法创建 Profile。";
-  }
-}
-async function select(p: any) {
-  if (p.active || !confirm("切换 Profile 会中断当前连接，继续吗？")) return;
-  await api(`/api/profiles/${encodeURIComponent(p.id)}/select`, json({}));
-  await load();
-}
-async function remove(p: any) {
-  if (p.default || p.active) {
-    error.value = "default 或当前 Profile 不能删除。";
-    return;
-  }
-  if (!confirm(`删除 ${p.name}？`)) return;
-  try {
-    await api(`/api/profiles/${encodeURIComponent(p.id)}`, {
-      method: "DELETE",
-    });
-    await load();
-  } catch {
-    error.value = "已连接的 Profile 必须先断开。";
-  }
-}
-function edit(p: any) {
-  editingID.value = p.id;
-  editDraft.value = { ...p.config, name: p.config?.name || p.name || "", managementURL: p.config?.managementURL || "" };
-  authMessage.value = "";
-  editOpen.value = true;
-}
-async function saveEdit() {
-  try {
-    await api(`/api/profiles/${encodeURIComponent(editingID.value)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ config: editDraft.value }) });
-    editOpen.value = false;
-    await load();
-  } catch {
-    error.value = "无法保存 Profile 配置。";
-  }
-}
-async function authenticateWithSetupKey() {
-  const setupKey = prompt("输入一次性或可复用的 NetBird Setup Key（不会保存或回显）：");
-  if (!setupKey) return;
-  try {
-    await api("/api/connect", json({ managementURL: editDraft.value.managementURL, setupKey }));
-    authMessage.value = "认证请求已提交，正在连接。";
-    await load();
-  } catch {
-    authMessage.value = "认证或连接失败；请检查 Setup Key 与 Management URL。";
-  }
-}
-onMounted(load);
+
+const profiles = ref<any[]>([]), selectedID = ref(""), error = ref(""), notice = ref("");
+const createOpen = ref(false), removeOpen = ref(false), tab = ref("general");
+const draft = ref<any>({}), original = ref<any>({});
+const createDraft = ref({ name:"", managementURL:"", setupKey:"", presharedKey:"", selectAfterCreate:true, connectAfterCreate:false });
+const selected = computed(() => profiles.value.find((profile) => profile.id === selectedID.value) || profiles.value[0]);
+const dirty = computed(() => JSON.stringify(draft.value) !== JSON.stringify(original.value));
+async function load(keep = true) { try { const result = await api<any[]>("/api/profiles"); profiles.value = result.map((detail) => ({ ...detail.metadata, ...detail.runtime, config: detail.config || {}, source: detail.source })); if (!keep || !profiles.value.some((item) => item.id === selectedID.value)) selectedID.value = profiles.value.find((item) => item.active)?.id || profiles.value[0]?.id || ""; beginEdit(); error.value=""; } catch { error.value="无法读取 Profiles。"; } }
+function beginEdit(){ if(!selected.value)return; original.value={...selected.value.config,name:selected.value.config?.name||selected.value.name||""}; draft.value={...original.value}; notice.value=""; }
+function choose(id:string){ if(dirty.value && !confirm("当前配置尚未保存，仍要切换吗？")) return; selectedID.value=id; beginEdit(); }
+async function create(){try{await api("/api/profiles",json({name:createDraft.value.name,config:{managementURL:createDraft.value.managementURL},setupKey:createDraft.value.setupKey,presharedKey:createDraft.value.presharedKey,selectAfterCreate:createDraft.value.selectAfterCreate,connectAfterCreate:createDraft.value.setupKey!==""||createDraft.value.connectAfterCreate}));createOpen.value=false;createDraft.value={name:"",managementURL:"",setupKey:"",presharedKey:"",selectAfterCreate:true,connectAfterCreate:false};await load(false)}catch{error.value="无法创建 Profile。"}}
+async function save(){if(!selected.value)return;try{const config={...draft.value,interfacePort:Number(draft.value.interfacePort||0),mtu:Number(draft.value.mtu||0),wireGuardPort:Number(draft.value.wireGuardPort||0),dnsRouteInterval:Number(draft.value.dnsRouteInterval||0)};const result:any=await api(`/api/profiles/${encodeURIComponent(selected.value.id)}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({config})});original.value={...config};notice.value=result.restartRequired?"配置已保存，需要重新连接后生效。":"配置已保存。";await load()}catch{error.value="配置校验或保存失败。"}}
+async function selectProfile(){if(!selected.value||selected.value.active)return;if(!confirm("切换 Profile 会中断当前连接，继续吗？"))return;try{await api(`/api/profiles/${encodeURIComponent(selected.value.id)}/select`,json({}));await load(false)}catch{error.value="切换 Profile 失败。"}}
+async function connect(){if(!selected.value)return;try{await api(`/api/profiles/${encodeURIComponent(selected.value.id)}/${selected.value.connected?"disconnect":"connect"}`,json({}));await load()}catch{error.value="连接操作失败。"}}
+async function remove(){if(!selected.value)return;try{await api(`/api/profiles/${encodeURIComponent(selected.value.id)}`,{method:"DELETE"});removeOpen.value=false;await load(false)}catch{error.value="无法删除 default、活动或仍已连接的 Profile。"}}
+onMounted(() => void load(false));
 </script>
 <template>
-  <FnPageHeader
-    title="Profiles"
-    description="在不同的 NetBird 帐户与网络配置之间安全切换"
-    ><template #default
-      ><FnButton variant="primary" @click="createOpen = true"
-        >新建 Profile</FnButton
-      ></template
-    ></FnPageHeader
-  >
-  <p v-if="error" class="error">{{ error }}</p>
-  <div class="grid">
-    <FnCard v-for="p in profiles" :key="p.id" class="profile"
-      ><div class="card-head">
-        <div>
-          <h3>{{ p.name }}</h3>
-          <small>{{ p.id }}</small>
-        </div>
-        <div>
-          <FnTag v-if="p.active" type="success">当前活动</FnTag
-          ><FnTag v-if="p.default" type="primary">默认</FnTag>
-        </div>
-      </div>
-      <dl>
-        <dt>连接状态</dt>
-        <dd>{{ p.connected ? "已连接" : "未连接" }}</dd>
-        <dt>Management URL</dt>
-        <dd>{{ p.config?.managementURL || "未配置" }}</dd>
-        <dt>NetBird IP</dt>
-        <dd>{{ p.netbirdIP || "—" }}</dd>
-        <dt>Networks / Exit Node</dt>
-        <dd>{{ p.enabledNetworks || 0 }} 个 / {{ p.exitNode || "未选择" }}</dd>
-        <dt>最后连接</dt>
-        <dd>{{ p.lastConnectedAt || "—" }}</dd>
-      </dl>
-      <div class="actions">
-        <FnButton @click="select(p)">切换</FnButton><FnButton @click="edit(p)">编辑配置</FnButton
-        ><FnButton
-          :disabled="p.default || p.active"
-          variant="danger"
-          @click="remove(p)"
-          >删除</FnButton
-        >
-      </div></FnCard
-    >
+  <FnPageHeader title="Profiles" description="为不同帐户或管理服务器维护独立的 NetBird 身份"><template #default><FnButton variant="primary" @click="createOpen=true">添加配置文件</FnButton></template></FnPageHeader>
+  <p v-if="error" class="error">{{error}}</p>
+  <div class="profile-workspace">
+    <FnCard class="profile-rail"><p class="rail-title">配置文件</p><p class="fn-note">切换配置文件会重新建立连接。</p><div class="profile-list"><button v-for="profile in profiles" :key="profile.id" class="profile-row" :class="{active:profile.id===selectedID}" @click="choose(profile.id)"><span class="person">◎</span><span><strong>{{profile.name}}</strong><small>{{profile.connected?"已连接":profile.config?.managementURL||"未连接"}}</small></span><FnTag v-if="profile.active" type="primary">活动</FnTag></button></div><FnButton class="rail-add" @click="createOpen=true">+ 添加配置文件</FnButton></FnCard>
+    <FnCard v-if="selected" class="settings">
+      <header class="settings-head"><div><div class="title-line"><h2>{{selected.name}}</h2><FnTag v-if="selected.active" type="success">当前活动</FnTag><FnTag v-if="selected.default" type="primary">默认</FnTag></div><p>{{selected.connected?"已连接到 NetBird 网络":"当前未连接"}} · {{selected.id}}</p></div><div class="head-actions"><FnButton v-if="!selected.active" @click="selectProfile">切换</FnButton><FnButton variant="primary" @click="connect">{{selected.connected?"断开":"连接"}}</FnButton></div></header>
+      <FnTabs v-model="tab"><template #default="{select,active}"><button :class="{active:active==='general'}" @click="select('general')">常规</button><button :class="{active:active==='network'}" @click="select('network')">网络</button><button :class="{active:active==='security'}" @click="select('security')">安全</button><button :class="{active:active==='advanced'}" @click="select('advanced')">高级</button></template></FnTabs>
+      <div class="form-area" v-if="tab==='general'"><p class="fn-section-label">连接</p><FnFormItem label="Profile 名称"><FnInput v-model="draft.name" placeholder="例如：工作网络"/></FnFormItem><FnFormItem label="Management URL" hint="更改后需要重新连接。"><FnInput v-model="draft.managementURL" placeholder="https://api.netbird.io"/></FnFormItem><div class="switch-row"><div><strong>启动时连接</strong><p>NetBird 服务启动后自动建立连接。</p></div><FnSwitch v-model="draft.connectOnStartup"/></div><div class="secret"><div><strong>Setup Key</strong><p>安全状态：{{selected.config?.setupKeyConfigured?"已配置":"未配置"}}。密钥不会在此显示。</p></div><FnTag :type="selected.config?.setupKeyConfigured?'success':'muted'">{{selected.config?.setupKeyConfigured?"已配置":"未配置"}}</FnTag></div></div>
+      <div class="form-area" v-else-if="tab==='network'"><p class="fn-section-label">连接性</p><div class="switch-row"><div><strong>网络变化时重新连接</strong><p>监测接口变化并自动恢复连接。</p></div><FnSwitch v-model="draft.networkMonitor"/></div><p class="fn-section-label">路由与 DNS</p><div class="switch-row"><div><strong>启用 DNS</strong><p>将 NetBird 管理的 DNS 设置应用到本机。</p></div><FnSwitch :model-value="!draft.disableDNS" @update:model-value="draft.disableDNS=!$event"/></div><div class="switch-row"><div><strong>启用客户端路由</strong><p>接受其他 Peer 发布的路由。</p></div><FnSwitch :model-value="!draft.disableClientRoutes" @update:model-value="draft.disableClientRoutes=!$event"/></div><div class="switch-row"><div><strong>启用服务器路由</strong><p>向其他 Peer 通告此主机的本地路由。</p></div><FnSwitch :model-value="!draft.disableServerRoutes" @update:model-value="draft.disableServerRoutes=!$event"/></div><div class="switch-row"><div><strong>启用 IPv6</strong><p>为 NetBird 叠加网络使用 IPv6 寻址。</p></div><FnSwitch v-model="draft.ipv6"/></div></div>
+      <div class="form-area" v-else-if="tab==='security'"><p class="fn-section-label">防火墙</p><div class="switch-row"><div><strong>阻止入站流量</strong><p>拒绝来自 Peer 与其路由网络的未请求连接。</p></div><FnSwitch v-model="draft.blockInbound"/></div><div class="switch-row"><div><strong>阻止 LAN 访问</strong><p>当此设备作为路由 Peer 时，阻止访问本地网络。</p></div><FnSwitch v-model="draft.blockLANAccess"/></div><p class="fn-section-label">加密</p><div class="switch-row"><div><strong>启用抗量子加密</strong><p>通过 Rosenpass 为 WireGuard 增加后量子密钥交换。</p></div><FnSwitch v-model="draft.quantumResistance"/></div><div class="switch-row" :class="{disabled:!draft.quantumResistance}"><div><strong>启用宽松模式</strong><p>允许连接到不支持抗量子加密的 Peer。</p></div><FnSwitch v-model="draft.rosenpassPermissive" :disabled="!draft.quantumResistance"/></div></div>
+      <div class="form-area" v-else><p class="fn-section-label">接口</p><FnFormItem label="接口名称"><FnInput v-model="draft.interfaceName" placeholder="wt0"/></FnFormItem><div class="two"><FnFormItem label="WireGuard 端口"><FnInput v-model="draft.wireGuardPort" type="number"/></FnFormItem><FnFormItem label="MTU"><FnInput v-model="draft.mtu" type="number"/></FnFormItem></div><p class="fn-section-label">预共享密钥</p><div class="secret"><div><strong>WireGuard PSK</strong><p>状态：{{selected.config?.presharedKeyConfigured?"已配置":"未配置"}}。设置与清除在安全操作中单独完成。</p></div><FnTag :type="selected.config?.presharedKeyConfigured?'success':'muted'">{{selected.config?.presharedKeyConfigured?"已配置":"未配置"}}</FnTag></div></div>
+      <footer class="save-bar"><p v-if="notice" class="notice">{{notice}}</p><span v-else>{{dirty?"存在未保存的配置更改":""}}</span><div><FnButton v-if="!selected.default&&!selected.active" variant="danger" @click="removeOpen=true">删除</FnButton><FnButton :disabled="!dirty" @click="beginEdit">取消更改</FnButton><FnButton variant="primary" :disabled="!dirty" @click="save">保存更改</FnButton></div></footer>
+    </FnCard>
   </div>
-  <FnDialog :open="createOpen" title="新建 Profile" @close="createOpen = false"
-    ><div class="form">
-      <FnFormItem label="Profile 名称"
-        ><FnInput
-          v-model="draft.name"
-          placeholder="例如：工作网络" /></FnFormItem
-      ><FnFormItem label="Management URL"
-        ><FnInput
-          v-model="draft.managementURL"
-          placeholder="https://api.netbird.io" /></FnFormItem
-      ><FnFormItem label="Setup Key（可选）"
-        ><FnInput v-model="draft.setupKey" type="password" /></FnFormItem
-      ><FnFormItem label="Pre-shared Key（可选）"
-        ><FnInput v-model="draft.presharedKey" type="password" /></FnFormItem
-      ><label>创建后切换 <FnSwitch v-model="draft.selectAfterCreate" /></label
-      ><label>创建后连接 <FnSwitch v-model="draft.connectAfterCreate" /></label>
-    </div>
-    <template #footer
-      ><FnButton @click="createOpen = false">取消</FnButton
-      ><FnButton variant="primary" @click="create">创建</FnButton></template
-    ></FnDialog
-  >
-  <FnDialog :open="editOpen" title="编辑 Profile 配置" @close="editOpen = false">
-    <div class="form">
-      <FnFormItem label="Profile 名称"><FnInput v-model="editDraft.name" /></FnFormItem>
-      <FnFormItem label="Management URL"><FnInput v-model="editDraft.managementURL" placeholder="https://api.netbird.io" /></FnFormItem>
-      <p class="hint">NAS 无桌面环境建议使用 Setup Key 认证；密钥仅随本次请求传给官方 NetBird CLI，不会被保存或显示。</p>
-      <p v-if="authMessage" :class="authMessage.startsWith('认证或') ? 'error' : 'hint'">{{ authMessage }}</p>
-    </div>
-    <template #footer>
-      <FnButton @click="authenticateWithSetupKey">使用 Setup Key 认证</FnButton>
-      <FnButton @click="editOpen = false">取消</FnButton>
-      <FnButton variant="primary" @click="saveEdit">保存</FnButton>
-    </template>
-  </FnDialog>
+  <FnDialog :open="createOpen" title="添加配置文件" @close="createOpen=false"><div class="dialog-form"><FnFormItem label="Profile 名称"><FnInput v-model="createDraft.name" placeholder="例如：工作网络"/></FnFormItem><FnFormItem label="Management URL"><FnInput v-model="createDraft.managementURL" placeholder="https://api.netbird.io"/></FnFormItem><FnFormItem label="Setup Key（可选）"><FnInput v-model="createDraft.setupKey" type="password"/></FnFormItem><FnFormItem label="Pre-shared Key（可选）"><FnInput v-model="createDraft.presharedKey" type="password"/></FnFormItem><div class="switch-row compact"><span>创建后切换</span><FnSwitch v-model="createDraft.selectAfterCreate"/></div><div class="switch-row compact"><span>创建后连接</span><FnSwitch v-model="createDraft.connectAfterCreate"/></div></div><template #footer><FnButton @click="createOpen=false">取消</FnButton><FnButton variant="primary" @click="create">添加配置文件</FnButton></template></FnDialog>
+  <FnDialog :open="removeOpen" title="删除配置文件" @close="removeOpen=false"><p>确认删除 <strong>{{selected?.name}}</strong>？此操作无法撤销。</p><template #footer><FnButton @click="removeOpen=false">取消</FnButton><FnButton variant="danger" @click="remove">删除</FnButton></template></FnDialog>
 </template>
 <style scoped>
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 16px;
-}
-.profile {
-  padding: 18px;
-}
-.card-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-}
-.card-head h3 {
-  margin: 0;
-  font-size: 16px;
-}
-.card-head small {
-  color: var(--fn-muted);
-}
-dl {
-  display: grid;
-  grid-template-columns: 125px 1fr;
-  gap: 8px;
-  margin: 18px 0;
-  font-size: 13px;
-}
-dt {
-  color: var(--fn-muted);
-}
-dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-.actions {
-  display: flex;
-  gap: 8px;
-}
-.form {
-  display: grid;
-  gap: 15px;
-}
-.form label {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.error {
-  color: #c43226;
-}
-.hint {
-  margin: 0;
-  color: var(--fn-muted);
-  font-size: 13px;
-  line-height: 1.5;
-}
+.profile-workspace{display:grid;grid-template-columns:265px minmax(0,1fr);gap:16px;align-items:start}.profile-rail{padding:12px}.rail-title{margin:6px 8px;font-weight:700}.profile-rail>.fn-note{margin:0 8px 13px}.profile-list{display:grid;gap:5px}.profile-row{display:flex;align-items:center;gap:10px;width:100%;border:0;border-radius:10px;background:transparent;padding:11px;text-align:left;color:var(--fn-text)}.profile-row.active{background:var(--fn-primary-soft)}.profile-row>span:nth-child(2){display:grid;gap:3px;flex:1;min-width:0}.profile-row small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fn-muted);font-size:12px}.person{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#edf0f4;color:#536174}.rail-add{width:100%;margin-top:13px}.settings{padding:0;overflow:hidden}.settings-head{display:flex;justify-content:space-between;align-items:center;padding:20px 22px;border-bottom:1px solid var(--fn-border)}.title-line{display:flex;align-items:center;gap:8px}.settings h2{margin:0;font-size:20px}.settings-head p{margin:6px 0 0;color:var(--fn-muted);font-size:13px}.head-actions{display:flex;gap:8px}.settings :deep(.tabs){margin:0;padding:0 22px}.settings :deep(.tabs) button{border:0;background:transparent;padding:14px 1px 12px;color:var(--fn-muted);font:inherit}.settings :deep(.tabs) button.active{color:var(--fn-primary);border-bottom:2px solid var(--fn-primary);font-weight:600}.form-area{display:grid;gap:17px;padding:4px 64px 28px;min-height:430px}.switch-row,.secret{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:10px 0}.switch-row>div,.secret>div{display:grid;gap:5px}.switch-row strong,.secret strong{font-size:15px}.switch-row p,.secret p{margin:0;color:var(--fn-muted);font-size:13px;line-height:1.45}.switch-row.disabled{opacity:.5}.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}.save-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 22px;border-top:1px solid var(--fn-border);background:#fafbfd;min-height:66px}.save-bar>div{display:flex;gap:8px}.notice{margin:0;color:#16803c;font-size:13px}.dialog-form{display:grid;gap:14px}.compact{padding:0}.error{color:#c43226}@media(max-width:900px){.profile-workspace{grid-template-columns:1fr}.form-area{padding:4px 24px 28px}.profile-rail{max-height:none}.settings-head{align-items:flex-start;gap:12px;flex-direction:column}.two{grid-template-columns:1fr}}
 </style>

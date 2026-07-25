@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import FnSidebar from "./components/FnSidebar.vue";
 const links = [
-  { path: "/", label: "概览" },
-  { path: "/peers", label: "Peers" },
-  { path: "/networks", label: "Networks" },
-  { path: "/profiles", label: "Profiles" },
-  { path: "/diagnostics", label: "日志与诊断" },
-  { path: "/client", label: "客户端管理" },
+  { path: "/", label: "概览", icon: "⌂" },
+  { path: "/peers", label: "Peers", icon: "◌" },
+  { path: "/networks", label: "Networks", icon: "⌘" },
+  { path: "/profiles", label: "Profiles", icon: "◎" },
+  { path: "/diagnostics", label: "日志与诊断", icon: "◫" },
+  { path: "/client", label: "客户端管理", icon: "⚙" },
 ];
 </script>
 <template>
