@@ -79,6 +79,10 @@ type networkService interface {
 	Deselect(context.Context, []string) error
 }
 type logReader interface{ Latest() ([]string, error) }
+type ssoService interface {
+	Start(context.Context, string) (netbird.SSOSession, string, error)
+	Status(string) (netbird.SSOSession, error)
+}
 type response struct {
 	Status string `json:"status"`
 	Data   any    `json:"data"`
@@ -93,6 +97,7 @@ func NewHandler(logger *slog.Logger, client statusProvider, args ...any) http.Ha
 	var peers peerService
 	var networks networkService
 	var logs logReader
+	var sso ssoService
 	var build BuildInfo
 	if len(args) == 1 {
 		build, _ = args[0].(BuildInfo)
@@ -125,6 +130,16 @@ func NewHandler(logger *slog.Logger, client statusProvider, args ...any) http.Ha
 		networks, _ = args[5].(networkService)
 		logs, _ = args[6].(logReader)
 		build, _ = args[7].(BuildInfo)
+	} else if len(args) == 9 {
+		manager, _ = args[0].(binaryManager)
+		life, _ = args[1].(lifecycle)
+		profiles, _ = args[2].(profileManager)
+		runtime, _ = args[3].(runtimeStatusService)
+		peers, _ = args[4].(peerService)
+		networks, _ = args[5].(networkService)
+		logs, _ = args[6].(logReader)
+		sso, _ = args[7].(ssoService)
+		build, _ = args[8].(BuildInfo)
 	}
 	if manager == nil {
 		manager = unavailableManager{}
@@ -277,6 +292,41 @@ func NewHandler(logger *slog.Logger, client statusProvider, args ...any) http.Ha
 			return
 		}
 		writeJSON(w, response{Status: "ok", Data: true})
+	})
+	mux.HandleFunc("POST /api/profiles/{id}/sso/start", func(w http.ResponseWriter, r *http.Request) {
+		if !admin(w, r) {
+			return
+		}
+		if sso == nil {
+			writeError(w, 503, "SSO unavailable")
+			return
+		}
+		v, e := profiles.Get(r.Context(), r.PathValue("id"))
+		if e != nil {
+			profileFailure(w, e)
+			return
+		}
+		session, url, e := sso.Start(r.Context(), v.Config.ManagementURL)
+		if e != nil {
+			writeError(w, 409, "SSO start failed")
+			return
+		}
+		writeJSON(w, response{Status: "ok", Data: map[string]any{"session": session, "verificationURI": url}})
+	})
+	mux.HandleFunc("GET /api/profiles/{id}/sso/{session}", func(w http.ResponseWriter, r *http.Request) {
+		if !admin(w, r) {
+			return
+		}
+		if sso == nil {
+			writeError(w, 503, "SSO unavailable")
+			return
+		}
+		v, e := sso.Status(r.PathValue("session"))
+		if e != nil {
+			writeError(w, 404, "SSO session unavailable")
+			return
+		}
+		writeJSON(w, response{Status: "ok", Data: v})
 	})
 	mux.HandleFunc("POST /api/profiles/{id}/rename", func(w http.ResponseWriter, r *http.Request) {
 		if !admin(w, r) {

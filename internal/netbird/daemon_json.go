@@ -145,6 +145,32 @@ func (c *DaemonJSONClient) Connect(ctx context.Context, options ConnectOptions) 
 func (c *DaemonJSONClient) Disconnect(ctx context.Context) error {
 	return c.call(ctx, "Down", map[string]any{}, &map[string]any{})
 }
+func (c *DaemonJSONClient) BeginSSO(ctx context.Context, managementURL string) (SSOLogin, error) {
+	if !safeValue(managementURL) {
+		return SSOLogin{}, errors.New("invalid management URL")
+	}
+	var out struct {
+		Needs    bool   `json:"needsSSOLogin"`
+		UserCode string `json:"userCode"`
+		URL      string `json:"verificationURIComplete"`
+	}
+	if err := c.call(ctx, "Login", map[string]any{"managementUrl": managementURL}, &out); err != nil {
+		return SSOLogin{}, err
+	}
+	if !out.Needs || out.UserCode == "" || out.URL == "" {
+		return SSOLogin{}, errors.New("SSO login unavailable")
+	}
+	return SSOLogin{VerificationURI: out.URL, UserCode: out.UserCode}, nil
+}
+func (c *DaemonJSONClient) WaitSSO(ctx context.Context, code string) error {
+	if !safeSecret(code) || code == "" {
+		return errors.New("invalid SSO code")
+	}
+	if err := c.call(ctx, "WaitSSOLogin", map[string]any{"userCode": code}, &map[string]any{}); err != nil {
+		return err
+	}
+	return c.call(ctx, "Up", map[string]any{}, &map[string]any{})
+}
 
 func (c *DaemonJSONClient) Profiles(ctx context.Context) ([]Profile, error) {
 	var out struct {

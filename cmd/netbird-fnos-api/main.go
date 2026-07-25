@@ -43,7 +43,8 @@ func main() {
 	peers := netbird.NewPeerService(client)
 	networks := netbird.NewNetworkService(client)
 	logs := api.NewLogReader(filepath.Join(cfg.PackageVar, "netbird-fnos-api.log"), filepath.Join(cfg.PackageVar, "netbird", "daemon.log"))
-	handler := api.NewHandler(logger, client, manager, lifecycle, profiles, status, peers, networks, logs, api.BuildInfo{Version: version, Commit: commit, BuildTime: buildTime})
+	sso := netbird.NewSSOService(client)
+	handler := api.NewHandler(logger, client, manager, lifecycle, profiles, status, peers, networks, logs, sso, api.BuildInfo{Version: version, Commit: commit, BuildTime: buildTime})
 	if cfg.WebRoot != "" {
 		handler = api.WithStaticFiles(handler, cfg.GatewayPrefix, cfg.WebRoot)
 	}

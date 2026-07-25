@@ -54,6 +54,10 @@ type ConnectOptions struct {
 	DisableAutoConnect  bool   `json:"disableAutoConnect"`
 	DisableClientRoutes bool   `json:"disableClientRoutes"`
 }
+type SSOLogin struct {
+	VerificationURI string `json:"verificationURI"`
+	UserCode        string
+}
 
 func safeValue(v string) bool  { return v != "" && len(v) <= 256 && !strings.ContainsAny(v, "\x00\r\n") }
 func safeSecret(v string) bool { return len(v) <= 4096 && !strings.ContainsAny(v, "\x00\r\n") }
