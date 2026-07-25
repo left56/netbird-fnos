@@ -144,7 +144,7 @@ func (s *NetworkService) List(ctx context.Context) (NetworkList, error) {
 	for _, n := range v {
 		rangeValue := strings.TrimSpace(n.Name)
 		n.ExitNode = n.ExitNode || rangeValue == "0.0.0.0/0" || rangeValue == "::/0"
-		n.Overlapping = rangeValue != "" && counts[rangeValue] > 1
+		n.Overlapping = !n.ExitNode && rangeValue != "" && counts[rangeValue] > 1
 		result.All = append(result.All, n)
 		if n.Selected {
 			result.Selected = append(result.Selected, n)

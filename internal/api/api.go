@@ -666,6 +666,9 @@ func (r fileLogReader) Latest() ([]string, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
+		if errors.Is(err, os.ErrPermission) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
