@@ -38,11 +38,12 @@ type Profile struct {
 }
 
 type Network struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Selected    bool   `json:"selected"`
-	ExitNode    bool   `json:"exitNode"`
-	Overlapping bool   `json:"overlap"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Selected    bool     `json:"selected"`
+	ExitNode    bool     `json:"exitNode"`
+	Overlapping bool     `json:"overlap"`
+	Domains     []string `json:"domains,omitempty"`
 }
 
 type ConnectOptions struct {

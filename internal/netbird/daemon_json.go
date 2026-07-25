@@ -218,9 +218,10 @@ func (c *DaemonJSONClient) RemoveProfile(ctx context.Context, handle string) err
 func (c *DaemonJSONClient) Networks(ctx context.Context) ([]Network, error) {
 	var out struct {
 		Routes []struct {
-			ID       string `json:"ID"`
-			Range    string `json:"range"`
-			Selected bool   `json:"selected"`
+			ID       string   `json:"ID"`
+			Range    string   `json:"range"`
+			Selected bool     `json:"selected"`
+			Domains  []string `json:"domains"`
 		} `json:"routes"`
 	}
 	if err := c.call(ctx, "ListNetworks", map[string]any{}, &out); err != nil {
@@ -228,7 +229,14 @@ func (c *DaemonJSONClient) Networks(ctx context.Context) ([]Network, error) {
 	}
 	result := make([]Network, 0, len(out.Routes))
 	for _, v := range out.Routes {
-		result = append(result, Network{ID: v.ID, Name: v.Range, Selected: v.Selected})
+		name := v.Range
+		if name == "" || strings.EqualFold(name, "invalid Prefix") {
+			name = strings.Join(v.Domains, ", ")
+		}
+		if name == "" {
+			name = "未命名 Network"
+		}
+		result = append(result, Network{ID: v.ID, Name: name, Selected: v.Selected, Domains: v.Domains})
 	}
 	return result, nil
 }

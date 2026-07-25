@@ -3,7 +3,7 @@ import { onMounted, ref } from "vue";
 import { api } from "../api"; import FnButton from "../components/FnButton.vue"; import FnCard from "../components/FnCard.vue"; import FnPageHeader from "../components/FnPageHeader.vue";
 const lines=ref<string[]>([]), error=ref("");
 async function load(){try{const result=await api<any>("/api/logs/latest");lines.value=result.lines||[];error.value=""}catch{error.value="日志暂不可用。"}}
-async function copy(){try{await navigator.clipboard.writeText(lines.value.join("\n"))}catch{error.value="无法复制日志。"}}
+async function copy(){const text=lines.value.join("\n");try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text)}else{const el=document.createElement("textarea");el.value=text;el.style.position="fixed";el.style.opacity="0";document.body.appendChild(el);el.select();if(!document.execCommand("copy"))throw new Error("copy failed");el.remove()}error.value=""}catch{error.value="无法复制日志，请使用下载。"}}
 function download(){const blob=new Blob([lines.value.join("\n")+"\n"],{type:"text/plain"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="netbird-fnos-latest.log";a.click();URL.revokeObjectURL(url)}
 onMounted(load);
 </script>
