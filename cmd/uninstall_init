@@ -8,6 +8,7 @@ socket_path="${TRIM_APPDEST:?}/app.sock"
 daemon_dir="${TRIM_PKGVAR}/netbird"
 daemon_pid_file="${daemon_dir}/daemon.pid"
 daemon_socket="${daemon_dir}/daemon.sock"
+daemon_json_socket="${daemon_dir}/daemon-http.sock"
 
 write_error() { printf '%s\n' "$1" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"; }
 running() {
@@ -33,4 +34,4 @@ stop_and_confirm() {
 stop_and_confirm "NetBird API service" "$pid_file" || exit 1
 rm -f "$pid_file" "$socket_path"
 stop_and_confirm "NetBird daemon" "$daemon_pid_file" || exit 1
-rm -f "$daemon_pid_file" "$daemon_socket"
+rm -f "$daemon_pid_file" "$daemon_socket" "$daemon_json_socket"

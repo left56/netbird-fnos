@@ -7,7 +7,7 @@ import (
 
 type runtimeFake struct{}
 
-func (runtimeFake) Command(context.Context, ...string) ([]byte, error) {
+func (runtimeFake) StatusJSON(context.Context) ([]byte, error) {
 	return []byte(`{"connected":true,"peers":{"one":{"fqdn":"peer","connectionStatus":"Connected","connectionType":"P2P"}}}`), nil
 }
 func (runtimeFake) Status(context.Context) Status { return Status{Connected: true} }

@@ -26,11 +26,13 @@ type Config struct {
 	NetBirdBinary  string
 	CommandTimeout time.Duration
 	DaemonAddr     string
+	DaemonJSONAddr string
 }
 
 func Load() (Config, error) {
 	cfg := Config{ListenAddr: value("NB_FNOS_LISTEN_ADDR", defaultListenAddr), SocketPath: os.Getenv("NB_FNOS_SOCKET"), GatewayPrefix: value("NB_FNOS_GATEWAY_PREFIX", "/"), WebRoot: os.Getenv("NB_FNOS_WEB_ROOT"), PackageVar: value("TRIM_PKGVAR", os.TempDir()), AppDest: value("TRIM_APPDEST", "."), NetBirdBinary: value("NB_FNOS_NETBIRD_BINARY", "netbird"), CommandTimeout: defaultTimeout}
 	cfg.DaemonAddr = value("NB_FNOS_DAEMON_ADDR", "unix://"+filepath.Join(cfg.PackageVar, "netbird", "daemon.sock"))
+	cfg.DaemonJSONAddr = value("NB_FNOS_DAEMON_JSON_ADDR", "unix://"+filepath.Join(cfg.PackageVar, "netbird", "daemon-http.sock"))
 	if raw := os.Getenv("NB_FNOS_COMMAND_TIMEOUT_SECONDS"); raw != "" {
 		seconds, err := strconv.Atoi(raw)
 		if err != nil || seconds <= 0 {

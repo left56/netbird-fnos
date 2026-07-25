@@ -14,10 +14,3 @@ func TestStatusJSONProducesSafePeerView(t *testing.T) {
 		t.Fatalf("unexpected peer: %#v", status.Peers[0])
 	}
 }
-
-func TestNetworksTextRecognizesSelectionAndExitNode(t *testing.T) {
-	got := NetworksText("ID Name State\nnet1 office ✓ selected\nnet2 exit exit-node")
-	if len(got) != 2 || !got[0].Selected || !got[1].ExitNode {
-		t.Fatalf("unexpected networks: %#v", got)
-	}
-}

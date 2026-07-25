@@ -33,7 +33,11 @@ func main() {
 
 	manager := netbird.NewBinaryManager(cfg.PackageVar, cfg.AppDest, netbird.ExecRunner{}, cfg.CommandTimeout)
 	lifecycle := netbird.NewLifecycle(manager, cfg.PackageVar)
-	client := netbird.NewManagedClientWithDaemon(netbird.ExecRunner{}, manager, cfg.CommandTimeout, cfg.DaemonAddr)
+	client, err := netbird.NewDaemonJSONClient(cfg.DaemonJSONAddr, cfg.CommandTimeout)
+	if err != nil {
+		logger.Error("invalid NetBird daemon JSON socket", "error", err)
+		os.Exit(1)
+	}
 	profiles := netbird.NewProfileService(client, netbird.NewProfileConfigStore(cfg.PackageVar))
 	status := netbird.NewStatusService(client, manager, version)
 	peers := netbird.NewPeerService(client)

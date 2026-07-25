@@ -8,16 +8,12 @@ import (
 )
 
 type CommandRunner interface {
-	Command(context.Context, ...string) ([]byte, error)
+	StatusJSON(context.Context) ([]byte, error)
 	Status(context.Context) Status
 	Profiles(context.Context) ([]Profile, error)
 	Networks(context.Context) ([]Network, error)
 	SelectNetworks(context.Context, []string, bool) error
 	DeselectNetworks(context.Context, []string) error
-}
-
-func (c Client) Command(ctx context.Context, args ...string) ([]byte, error) {
-	return c.run(ctx, args...)
 }
 
 type StatusService struct {
@@ -71,7 +67,7 @@ func NewStatusService(c CommandRunner, m *BinaryManager, w string) *StatusServic
 	return &StatusService{c, m, w}
 }
 func (s *StatusService) Get(ctx context.Context) (RuntimeStatus, error) {
-	raw, e := s.client.Command(ctx, "status", "--json")
+	raw, e := s.client.StatusJSON(ctx)
 	if e != nil {
 		return RuntimeStatus{}, e
 	}
@@ -113,7 +109,7 @@ type PeerService struct{ client CommandRunner }
 
 func NewPeerService(c CommandRunner) *PeerService { return &PeerService{c} }
 func (s *PeerService) List(ctx context.Context) ([]parser.Peer, error) {
-	raw, e := s.client.Command(ctx, "status", "--json")
+	raw, e := s.client.StatusJSON(ctx)
 	if e != nil {
 		return nil, e
 	}

@@ -10,6 +10,7 @@ log_file="${TRIM_PKGVAR}/netbird-fnos-api.log"
 daemon_dir="${TRIM_PKGVAR}/netbird"
 daemon_pid_file="${daemon_dir}/daemon.pid"
 daemon_socket="${daemon_dir}/daemon.sock"
+daemon_json_socket="${daemon_dir}/daemon-http.sock"
 daemon_log="${daemon_dir}/daemon.log"
 daemon_config="${daemon_dir}/config.json"
 
@@ -38,16 +39,16 @@ daemon_running() {
 start_daemon() {
   if daemon_running; then return 0; fi
   mkdir -p "$daemon_dir"
-  rm -f "$daemon_pid_file" "$daemon_socket"
-  NB_STATE_DIR="$daemon_dir" nohup "${TRIM_APPDEST}/bin/netbird" --daemon-addr "unix://${daemon_socket}" --config "$daemon_config" --log-file "$daemon_log" service run >/dev/null 2>&1 &
+  rm -f "$daemon_pid_file" "$daemon_socket" "$daemon_json_socket"
+  NB_STATE_DIR="$daemon_dir" nohup "${TRIM_APPDEST}/bin/netbird" --daemon-addr "unix://${daemon_socket}" --enable-json-socket --json-socket "unix://${daemon_json_socket}" --config "$daemon_config" --log-file "$daemon_log" service run >/dev/null 2>&1 &
   echo "$!" > "$daemon_pid_file"
   attempts=0
-  while [ ! -S "$daemon_socket" ] && daemon_running && [ "$attempts" -lt 10 ]; do sleep 1; attempts=$((attempts + 1)); done
-  if ! daemon_running || [ ! -S "$daemon_socket" ]; then return 1; fi
+  while { [ ! -S "$daemon_socket" ] || [ ! -S "$daemon_json_socket" ]; } && daemon_running && [ "$attempts" -lt 10 ]; do sleep 1; attempts=$((attempts + 1)); done
+  if ! daemon_running || [ ! -S "$daemon_socket" ] || [ ! -S "$daemon_json_socket" ]; then return 1; fi
   # The root daemon exposes a local control socket only to the unprivileged
   # wrapper API user. No browser-controlled process gets direct root access.
-  chown "$api_user:$api_group" "$daemon_socket"
-  chmod 0600 "$daemon_socket"
+  chown "$api_user:$api_group" "$daemon_socket" "$daemon_json_socket"
+  chmod 0600 "$daemon_socket" "$daemon_json_socket"
 }
 stop_daemon() {
   if daemon_running; then
@@ -60,7 +61,7 @@ stop_daemon() {
       return 1
     fi
   fi
-  rm -f "$daemon_pid_file" "$daemon_socket"
+  rm -f "$daemon_pid_file" "$daemon_socket" "$daemon_json_socket"
 }
 case "${1:-}" in
   start)
@@ -75,6 +76,7 @@ case "${1:-}" in
     nohup su -s /bin/sh "$api_user" -c 'exec "$@"' sh env \
       NB_FNOS_SOCKET="$socket_path" \
       NB_FNOS_DAEMON_ADDR="unix://${daemon_socket}" \
+      NB_FNOS_DAEMON_JSON_ADDR="unix://${daemon_json_socket}" \
       NB_STATE_DIR="$daemon_dir" \
       NB_FNOS_GATEWAY_PREFIX="/app/netbird-fnos" \
       NB_FNOS_WEB_ROOT="${TRIM_APPDEST}/www" \

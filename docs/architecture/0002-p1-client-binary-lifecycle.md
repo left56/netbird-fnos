@@ -71,10 +71,12 @@ starts only the bundled, fixed-path daemon as root; it then uses the declared
 `netbird-fnos` package user to run the HTTP API. The daemon Unix socket is
 owned by that package user and mode `0600`.
 
-The API accepts no executable path or shell fragment, all NetBird calls use
-argument arrays and timeouts, and the daemon is reachable only through its
-private Unix socket. This is a local-install requirement: third-party root FPKs
+The API accepts no executable path, shell fragment, RPC method, or socket path.
+Runtime operations use the documented NetBird v0.75+ HTTP/JSON daemon gateway
+over a separate private Unix socket; only fixed, typed daemon methods are
+available to services. The daemon is reachable only through private Unix
+sockets. This is a local-install requirement: third-party root FPKs
 may not be accepted by the fnOS app store. Hardware validation must confirm
 that `wt0` can be created, required routes are installed, API process UID is
-`netbird-fnos`, daemon UID is root, and the daemon socket is inaccessible to
+`netbird-fnos`, daemon UID is root, and both daemon sockets are inaccessible to
 other users.
