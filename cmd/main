@@ -48,7 +48,7 @@ start_daemon() {
   } >"$daemon_bootstrap_log"
   # Keep process-launch diagnostics separate from NetBird's own log file. This
   # captures loader and permission failures without concurrent writers (SC2094).
-  NB_STATE_DIR="$daemon_dir" nohup "${TRIM_APPDEST}/bin/netbird" --daemon-addr "unix://${daemon_socket}" --enable-json-socket --json-socket "unix://${daemon_json_socket}" --config "$daemon_config" --log-file "$daemon_log" service run >>"$daemon_bootstrap_log" 2>&1 &
+  NB_STATE_DIR="$daemon_dir" nohup "${TRIM_APPDEST}/bin/netbird" service run --daemon-addr "unix://${daemon_socket}" --enable-json-socket --json-socket "unix://${daemon_json_socket}" --config "$daemon_config" --log-file "$daemon_log" >>"$daemon_bootstrap_log" 2>&1 &
   echo "$!" > "$daemon_pid_file"
   attempts=0
   while { [ ! -S "$daemon_socket" ] || [ ! -S "$daemon_json_socket" ]; } && daemon_running && [ "$attempts" -lt 10 ]; do sleep 1; attempts=$((attempts + 1)); done
