@@ -12,6 +12,7 @@ daemon_pid_file="${daemon_dir}/daemon.pid"
 daemon_socket="${daemon_dir}/daemon.sock"
 daemon_json_socket="${daemon_dir}/daemon-http.sock"
 daemon_log="${daemon_dir}/daemon.log"
+daemon_bootstrap_log="${daemon_dir}/daemon-bootstrap.log"
 daemon_config="${daemon_dir}/config.json"
 
 write_error() { printf '%s\n' "$1" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"; }
@@ -40,7 +41,14 @@ start_daemon() {
   if daemon_running; then return 0; fi
   mkdir -p "$daemon_dir"
   rm -f "$daemon_pid_file" "$daemon_socket" "$daemon_json_socket"
-  NB_STATE_DIR="$daemon_dir" nohup "${TRIM_APPDEST}/bin/netbird" --daemon-addr "unix://${daemon_socket}" --enable-json-socket --json-socket "unix://${daemon_json_socket}" --config "$daemon_config" --log-file "$daemon_log" service run >/dev/null 2>&1 &
+  {
+    printf '%s\n' "starting NetBird daemon"
+    id
+    grep -E 'CapEff|CapBnd|NoNewPrivs|Seccomp' /proc/$$/status 2>/dev/null || true
+  } >"$daemon_bootstrap_log"
+  # Keep process-launch diagnostics separate from NetBird's own log file. This
+  # captures loader and permission failures without concurrent writers (SC2094).
+  NB_STATE_DIR="$daemon_dir" nohup "${TRIM_APPDEST}/bin/netbird" --daemon-addr "unix://${daemon_socket}" --enable-json-socket --json-socket "unix://${daemon_json_socket}" --config "$daemon_config" --log-file "$daemon_log" service run >>"$daemon_bootstrap_log" 2>&1 &
   echo "$!" > "$daemon_pid_file"
   attempts=0
   while { [ ! -S "$daemon_socket" ] || [ ! -S "$daemon_json_socket" ]; } && daemon_running && [ "$attempts" -lt 10 ]; do sleep 1; attempts=$((attempts + 1)); done
@@ -69,7 +77,7 @@ case "${1:-}" in
     rm -f "$pid_file" "$socket_path"
     require_api_user || exit 1
     prepare_api_runtime
-    if ! start_daemon; then write_error "NetBird daemon failed to start; inspect $daemon_log."; exit 1; fi
+    if ! start_daemon; then write_error "NetBird daemon failed to start; inspect $daemon_log and $daemon_bootstrap_log."; exit 1; fi
     # Run the HTTP API as the package user. The command is fixed; no request
     # value is interpolated into this privilege transition.
     # shellcheck disable=SC2016 # $@ is expanded by the fixed child shell.
