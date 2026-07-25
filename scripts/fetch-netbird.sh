@@ -11,13 +11,15 @@ tag="v${version#v}"
 api="https://api.github.com/repos/netbirdio/netbird/releases/tags/${tag}"
 asset="netbird_${version#v}_linux_${release_arch}.tar.gz"
 checksums="netbird_${version#v}_checksums.txt"
-metadata="$(curl --fail --location --silent --show-error "$api")"
-asset_url="$(jq -r --arg name "$asset" '.assets[] | select(.name == $name) | .browser_download_url' <<<"$metadata")"
-checksum_url="$(jq -r --arg name "$checksums" '.assets[] | select(.name == $name) | .browser_download_url' <<<"$metadata")"
+curl_args=(--fail --location --silent --show-error --retry 3 --retry-all-errors --user-agent "netbird-fnos-ci")
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then curl_args+=(--header "Authorization: Bearer ${GITHUB_TOKEN}"); fi
+metadata="$(curl "${curl_args[@]}" --header 'Accept: application/vnd.github+json' "$api")"
+asset_url="$(jq -r --arg name "$asset" '.assets[] | select(.name == $name) | .url' <<<"$metadata")"
+checksum_url="$(jq -r --arg name "$checksums" '.assets[] | select(.name == $name) | .url' <<<"$metadata")"
 test "$asset_url" != null && test "$checksum_url" != null
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-curl --fail --location --silent --show-error "$checksum_url" -o "$tmp/checksums.txt"
-curl --fail --location --silent --show-error "$asset_url" -o "$tmp/$asset"
+curl "${curl_args[@]}" --header 'Accept: application/octet-stream' "$checksum_url" -o "$tmp/checksums.txt"
+curl "${curl_args[@]}" --header 'Accept: application/octet-stream' "$asset_url" -o "$tmp/$asset"
 grep -E "[[:space:]]${asset}$" "$tmp/checksums.txt" > "$tmp/expected.txt"
 (cd "$tmp" && sha256sum -c expected.txt)
 tar -xzf "$tmp/$asset" -C "$tmp"

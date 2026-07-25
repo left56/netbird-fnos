@@ -65,6 +65,7 @@ jobs:
           fnpack --help
       - name: Build FPK
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           NETBIRD_VERSION: 0.75.0
           TARGET_ARCH: ${{ matrix.target_arch }}
           GOARCH: ${{ matrix.goarch }}
