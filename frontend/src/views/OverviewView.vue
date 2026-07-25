@@ -26,7 +26,7 @@ onMounted(() => { void refresh(); timer = window.setInterval(refresh, 15000); })
 onBeforeUnmount(() => { if (timer) window.clearInterval(timer); });
 </script>
 <template>
-  <FnPageHeader title="概览" description="当前 NetBird Profile 的连接工作区">
+  <FnPageHeader title="概览" description="连接状态与对等节点">
     <template #default><FnButton @click="refresh">刷新</FnButton><FnButton variant="primary" @click="toggle">{{ connected ? "断开连接" : "连接" }}</FnButton></template>
   </FnPageHeader>
   <p v-if="error" class="error">{{ error }}</p>
