@@ -3,6 +3,7 @@ package netbird
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/left56/netbird-fnos/internal/netbird/parser"
 )
@@ -135,10 +136,21 @@ func (s *NetworkService) List(ctx context.Context) (NetworkList, error) {
 	if e != nil {
 		return NetworkList{}, e
 	}
-	result := NetworkList{All: v, Overlapping: []Network{}, ExitNodes: []Network{}, Selected: []Network{}, Pending: []Network{}, Capabilities: Capabilities{Networks: true, ExitNode: true}}
+	counts := make(map[string]int, len(v))
 	for _, n := range v {
+		counts[strings.TrimSpace(n.Name)]++
+	}
+	result := NetworkList{All: make([]Network, 0, len(v)), Overlapping: []Network{}, ExitNodes: []Network{}, Selected: []Network{}, Pending: []Network{}, Capabilities: Capabilities{Networks: true, ExitNode: true}}
+	for _, n := range v {
+		rangeValue := strings.TrimSpace(n.Name)
+		n.ExitNode = n.ExitNode || rangeValue == "0.0.0.0/0" || rangeValue == "::/0"
+		n.Overlapping = rangeValue != "" && counts[rangeValue] > 1
+		result.All = append(result.All, n)
 		if n.Selected {
 			result.Selected = append(result.Selected, n)
+		}
+		if n.Overlapping {
+			result.Overlapping = append(result.Overlapping, n)
 		}
 		if n.ExitNode {
 			result.ExitNodes = append(result.ExitNodes, n)
