@@ -31,8 +31,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	client := netbird.NewClient(netbird.ExecRunner{}, cfg.NetBirdBinary, cfg.CommandTimeout)
-	handler := api.NewHandler(logger, client, api.BuildInfo{Version: version, Commit: commit, BuildTime: buildTime})
+	manager := netbird.NewBinaryManager(cfg.PackageVar, cfg.AppDest, netbird.ExecRunner{}, cfg.CommandTimeout)
+	lifecycle := netbird.NewLifecycle(manager, cfg.PackageVar)
+	client, err := netbird.NewDaemonJSONClient(cfg.DaemonJSONAddr, cfg.CommandTimeout)
+	if err != nil {
+		logger.Error("invalid NetBird daemon JSON socket", "error", err)
+		os.Exit(1)
+	}
+	profiles := netbird.NewProfileService(client, netbird.NewProfileConfigStore(cfg.PackageVar))
+	status := netbird.NewStatusService(client, manager, version)
+	peers := netbird.NewPeerService(client)
+	networks := netbird.NewNetworkService(client)
+	logs := api.NewLogReader(filepath.Join(cfg.PackageVar, "netbird-fnos-api.log"), filepath.Join(cfg.PackageVar, "netbird", "daemon-bootstrap.log"), filepath.Join(cfg.PackageVar, "netbird", "daemon.log"))
+	sso := netbird.NewSSOService(client)
+	handler := api.NewHandler(logger, client, manager, lifecycle, profiles, status, peers, networks, logs, sso, api.BuildInfo{Version: version, Commit: commit, BuildTime: buildTime})
 	if cfg.WebRoot != "" {
 		handler = api.WithStaticFiles(handler, cfg.GatewayPrefix, cfg.WebRoot)
 	}

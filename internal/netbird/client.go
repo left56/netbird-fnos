@@ -2,13 +2,12 @@ package netbird
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"os/exec"
-	"time"
+	"strings"
 )
 
+// Runner is used only for binary lifecycle probes (version, architecture and
+// checksum validation). Runtime daemon control uses DaemonJSONClient.
 type Runner interface {
 	Run(context.Context, string, ...string) ([]byte, error)
 }
@@ -19,49 +18,47 @@ func (ExecRunner) Run(ctx context.Context, binary string, args ...string) ([]byt
 	return exec.CommandContext(ctx, binary, args...).Output()
 }
 
-type Client struct {
-	runner  Runner
-	binary  string
-	timeout time.Duration
-}
 type Status struct {
 	State     string `json:"state"`
 	Connected bool   `json:"connected"`
 	Detail    string `json:"detail,omitempty"`
 }
 
-func NewClient(runner Runner, binary string, timeout time.Duration) Client {
-	return Client{runner: runner, binary: binary, timeout: timeout}
+type Profile struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Active          bool   `json:"active"`
+	Default         bool   `json:"default"`
+	Connected       bool   `json:"connected"`
+	ManagementURL   string `json:"managementURL,omitempty"`
+	NetBirdIP       string `json:"netbirdIP,omitempty"`
+	EnabledNetworks int    `json:"enabledNetworks"`
+	ExitNode        string `json:"exitNode,omitempty"`
+	LastConnectedAt string `json:"lastConnectedAt,omitempty"`
 }
 
-func (c Client) Status(ctx context.Context) Status {
-	ctx, cancel := context.WithTimeout(ctx, c.timeout)
-	defer cancel()
-	output, err := c.runner.Run(ctx, c.binary, "status", "--json")
-	if err != nil {
-		return unavailable(err)
-	}
-	var response struct {
-		Status    string `json:"status"`
-		Connected bool   `json:"connected"`
-	}
-	if err := json.Unmarshal(output, &response); err != nil {
-		return Status{State: "unavailable", Detail: "official NetBird CLI returned an unsupported response"}
-	}
-	if response.Status == "" {
-		response.Status = "unknown"
-	}
-	return Status{State: response.Status, Connected: response.Connected}
+type Network struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Selected    bool     `json:"selected"`
+	ExitNode    bool     `json:"exitNode"`
+	Overlapping bool     `json:"overlap"`
+	Domains     []string `json:"domains,omitempty"`
 }
 
-func unavailable(err error) Status {
-	if errors.Is(err, exec.ErrNotFound) {
-		return Status{State: "unavailable", Detail: "official NetBird CLI is not installed"}
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return Status{State: "unavailable", Detail: "official NetBird CLI timed out"}
-	}
-	return Status{State: "unavailable", Detail: "official NetBird CLI is unavailable"}
+type ConnectOptions struct {
+	ManagementURL       string `json:"managementURL"`
+	SetupKey            string `json:"setupKey"`
+	AllowServerSSH      bool   `json:"allowServerSSH"`
+	BlockInbound        bool   `json:"blockInbound"`
+	BlockLANAccess      bool   `json:"blockLANAccess"`
+	DisableAutoConnect  bool   `json:"disableAutoConnect"`
+	DisableClientRoutes bool   `json:"disableClientRoutes"`
+}
+type SSOLogin struct {
+	VerificationURI string `json:"verificationURI"`
+	UserCode        string
 }
 
-func (c Client) String() string { return fmt.Sprintf("netbird client (%s)", c.binary) }
+func safeValue(v string) bool  { return v != "" && len(v) <= 256 && !strings.ContainsAny(v, "\x00\r\n") }
+func safeSecret(v string) bool { return len(v) <= 4096 && !strings.ContainsAny(v, "\x00\r\n") }

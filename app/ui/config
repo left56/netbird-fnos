@@ -1,1 +1,1 @@
-{".url":{"netbird-fnos.main":{"title":"NetBird","icon":"images/icon_{0}.png","type":"iframe","protocol":"","gatewayPrefix":"/app/netbird-fnos","gatewaySocket":"app.sock","url":"/app/netbird-fnos","allUsers":true}}}
+{".url":{"netbird-fnos.main":{"title":"NetBird","icon":"images/icon_{0}.png","type":"iframe","protocol":"","gatewayPrefix":"/app/netbird-fnos","gatewaySocket":"run/app.sock","url":"/app/netbird-fnos","allUsers":true}}}
